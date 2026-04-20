@@ -1,9 +1,9 @@
 import os
 import json
-from datetime import datetime, time
+from datetime import datetime
 from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, JobQueue
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 load_dotenv()
 
@@ -36,9 +36,9 @@ def get_total_acres():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🌳 Full-Season Peach Bot is LIVE!\n\n"
+        "🌳 Peach Harvest Bot is now LIVE and stable!\n\n"
         "Commands:\n"
-        "/map → see all your 45 fields\n"
+        "/map → see all 45 fields\n"
         "/report → season totals\n"
         "/acres → total acres you farm\n\n"
         "Send daily notes like: 'Field 5 12 bins' or 'Block 3 8 bins'"
@@ -86,19 +86,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ Saved! {len(entries)} entries logged for today.")
         return
 
-    # Simple answers for common questions
+    # Simple answers
     if "acre" in text or "how many acres" in text:
         acres = get_total_acres()
         await update.message.reply_text(f"🌳 You currently farm **{acres} acres**.")
     else:
         await update.message.reply_text("Got it! Try /acres, /map, or send a daily note like 'Field 5 12 bins'.")
-
-# Automatic daily reminders
-async def morning_reminder(context: ContextTypes.DEFAULT_TYPE):
-    await context.bot.send_message(chat_id=context.job.chat_id, text="🌅 Good morning! Ready for today's harvest? Send your daily note anytime.")
-
-async def evening_summary(context: ContextTypes.DEFAULT_TYPE):
-    await context.bot.send_message(chat_id=context.job.chat_id, text="🌙 Evening check-in: Bot is still running 24/7.")
 
 def main():
     app = Application.builder().token(TOKEN).build()
@@ -109,11 +102,7 @@ def main():
     app.add_handler(CommandHandler("acres", total_acres_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    job_queue: JobQueue = app.job_queue
-    job_queue.run_daily(morning_reminder, time=time(7, 0))
-    job_queue.run_daily(evening_summary, time=time(20, 0))
-    
-    print("Simple & stable peach bot is running!")
+    print("Stable peach bot is running!")
     app.run_polling()
 
 if __name__ == "__main__":
