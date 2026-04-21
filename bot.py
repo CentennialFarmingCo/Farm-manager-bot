@@ -9,6 +9,9 @@ load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
+# === YOUR DASHBOARD URL (CHANGE THIS) ===
+DASHBOARD_URL = "https://YOUR-DASHBOARD.onrender.com"   # ←←← REPLACE WITH YOUR REAL URL
+
 # Load field map
 FIELDS_MAP = "fields_map.json"
 DATA_FILE = "harvest_data.json"
@@ -36,12 +39,13 @@ def get_total_acres():
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🌳 Peach Harvest Bot is now LIVE and stable!\n\n"
+        "🌳 Peach Harvest Bot is LIVE!\n\n"
         "Commands:\n"
         "/map → see all 45 fields\n"
         "/report → season totals\n"
-        "/acres → total acres you farm\n\n"
-        "Send daily notes like: 'Field 5 12 bins' or 'Block 3 8 bins'"
+        "/acres → total acres you farm\n"
+        "/dashboard → open interactive farm map for clients\n\n"
+        "Send daily notes like: 'Field 5 12 bins'"
     )
 
 async def show_map(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -59,6 +63,14 @@ async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def total_acres_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     acres = get_total_acres()
     await update.message.reply_text(f"🌳 You currently farm **{acres} acres** across all 45 fields.")
+
+async def dashboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text(
+        f"🍑 **Interactive Farm Map**\n\n"
+        f"Here is your professional shaded field map for clients:\n"
+        f"{DASHBOARD_URL}\n\n"
+        "Share this link with anyone — it’s clean and fully interactive!"
+    )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.lower()
@@ -91,7 +103,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         acres = get_total_acres()
         await update.message.reply_text(f"🌳 You currently farm **{acres} acres**.")
     else:
-        await update.message.reply_text("Got it! Try /acres, /map, or send a daily note like 'Field 5 12 bins'.")
+        await update.message.reply_text("Got it! Try /dashboard, /acres, /map, or send a daily note.")
 
 def main():
     app = Application.builder().token(TOKEN).build()
@@ -100,9 +112,10 @@ def main():
     app.add_handler(CommandHandler("map", show_map))
     app.add_handler(CommandHandler("report", report))
     app.add_handler(CommandHandler("acres", total_acres_command))
+    app.add_handler(CommandHandler("dashboard", dashboard_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("Stable peach bot is running!")
+    print("Bot with dashboard link is running!")
     app.run_polling()
 
 if __name__ == "__main__":
