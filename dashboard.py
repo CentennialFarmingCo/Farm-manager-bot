@@ -16,12 +16,13 @@ with open("fields_map.json", "r") as f:
 
 df = pd.DataFrame(data)
 
-# Clean display name for clients (remove ownership prefixes)
+# SUPER CLEAN display name - removes all ownership prefixes
 def clean_name(name):
-    # Remove ownership prefixes like Johnston, Fagundes, Blue Lupin
-    name = re.sub(r'^(Johnston| F agundes|Blue Lupin)\s*', '', name, flags=re.IGNORECASE)
+    # Remove any ownership prefixes
+    name = re.sub(r'^(Johnston|Fagundes|Blue Lupin)\s*', '', name, flags=re.IGNORECASE).strip()
+    # Standardize "Block" format
     name = re.sub(r'^\s*Block\s*', 'Block ', name)
-    return name.strip()
+    return name
 
 df['display_name'] = df['name'].apply(clean_name)
 
