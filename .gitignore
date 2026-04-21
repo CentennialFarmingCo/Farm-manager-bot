@@ -1,1 +1,5 @@
 .env
+# Keep secrets safe
+.env
+*.env
+farm_data.db
