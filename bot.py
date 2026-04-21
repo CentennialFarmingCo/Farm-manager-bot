@@ -9,7 +9,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-DASHBOARD_URL = "https://peach-farm-dashboard-xxxx.onrender.com"   # ← REPLACE WITH YOUR REAL DASHBOARD URL
+DASHBOARD_URL = "https://centennial-farming-dashboard.onrender.com"   # ← REPLACE WITH YOUR REAL DASHBOARD URL
 
 # SQLite for scalability (handles thousands of acres)
 DB_FILE = "farm_data.db"
