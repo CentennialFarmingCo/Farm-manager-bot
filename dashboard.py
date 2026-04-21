@@ -6,7 +6,7 @@ import pandas as pd
 
 st.set_page_config(page_title=“Peach & Almond Farm Map”, page_icon=“🍑”, layout=“wide”)
 
-st.title(“🍑 Johnston & Fagundes Farms”)
+st.title(“Centennial Farming Company”)
 st.markdown(”**Professional Interactive Field Map** — For Current & Prospective Clients”)
 
 # Load your real field data with polygons
