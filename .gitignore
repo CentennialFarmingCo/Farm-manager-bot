@@ -1,5 +1,17 @@
-.env
-# Keep secrets safe
+# Environment variables (CRITICAL - contains API keys)
 .env
 *.env
+
+# Database files (contains your farm data)
 farm_data.db
+*.db
+
+# Python cache
+__pycache__/
+*.pyc
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
