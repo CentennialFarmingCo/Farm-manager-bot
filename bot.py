@@ -12,7 +12,7 @@ from typing import Dict, List, Optional
 load_dotenv()
 
 TOKEN = os.getenv(“TELEGRAM_BOT_TOKEN”)
-OPENWEATHER_API_KEY = os.getenv(“OPENWEATHER_API_KEY”)  # You’ll need to add this to your .env
+OPENWEATHER_API_KEY = os.getenv(“OPENWEATHER_API_KEY”)
 
 # === CONFIGURATION ===
 
@@ -32,7 +32,6 @@ self.init_database()
 
 ```
 def init_database(self):
-    """Initialize database with all required tables"""
     conn = sqlite3.connect(self.db_path)
     cursor = conn.cursor()
     
@@ -73,7 +72,7 @@ def init_database(self):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT NOT NULL,
             field_id TEXT,
-            category TEXT NOT NULL,  -- 'spray', 'fertilizer', 'labor', 'equipment'
+            category TEXT NOT NULL,
             item_name TEXT NOT NULL,
             quantity REAL,
             unit TEXT,
@@ -90,7 +89,7 @@ def init_database(self):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT NOT NULL,
             field_id TEXT NOT NULL,
-            application_type TEXT NOT NULL,  -- 'herbicide', 'insecticide', 'fungicide', 'fertilizer'
+            application_type TEXT NOT NULL,
             product_name TEXT NOT NULL,
             rate REAL,
             rate_unit TEXT,
@@ -107,8 +106,8 @@ def init_database(self):
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             date TEXT NOT NULL,
             field_id TEXT NOT NULL,
-            observation_type TEXT,  -- 'pest', 'disease', 'growth', 'irrigation', 'general'
-            severity TEXT,  -- 'low', 'medium', 'high'
+            observation_type TEXT,
+            severity TEXT,
             description TEXT,
             action_needed BOOLEAN DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -238,11 +237,9 @@ class WeatherService:
 def **init**(self, api_key: str):
 self.api_key = api_key
 self.base_url = “https://api.openweathermap.org/data/2.5”
-self.agro_url = “https://api.openweathermap.org/data/2.5/agro/1.0”
 
 ```
 async def get_current_weather(self, lat: float, lon: float) -> Dict:
-    """Get current weather conditions"""
     try:
         url = f"{self.base_url}/weather"
         params = {
@@ -261,15 +258,13 @@ async def get_current_weather(self, lat: float, lon: float) -> Dict:
             'temp_low': data['main'].get('temp_min'),
             'humidity': data['main']['humidity'],
             'wind_speed': data['wind']['speed'],
-            'conditions': data['weather'][0]['description'],
-            'uv_index': None  # Need separate call for UV
+            'conditions': data['weather'][0]['description']
         }
     except Exception as e:
         print(f"Weather API error: {e}")
         return {}
 
 async def get_forecast(self, lat: float, lon: float, days: int = 5) -> List[Dict]:
-    """Get weather forecast"""
     try:
         url = f"{self.base_url}/forecast"
         params = {
@@ -283,7 +278,7 @@ async def get_forecast(self, lat: float, lon: float, days: int = 5) -> List[Dict
         data = response.json()
         
         forecasts = []
-        for item in data['list'][:days*8]:  # 8 forecasts per day (3-hour intervals)
+        for item in data['list'][:days*8]:
             forecasts.append({
                 'datetime': item['dt_txt'],
                 'temp': item['main']['temp'],
@@ -327,7 +322,6 @@ self.peach_varieties = {
     }
 
 def get_daily_recommendations(self, current_weather: Dict, forecast: List[Dict], current_date: str) -> List[str]:
-    """Generate daily recommendations based on weather and calendar"""
     recommendations = []
     current_month = datetime.strptime(current_date, '%Y-%m-%d').month
     
@@ -341,34 +335,32 @@ def get_daily_recommendations(self, current_weather: Dict, forecast: List[Dict],
         recommendations.append("💨 High winds detected - avoid spray applications today.")
     
     # Seasonal recommendations
-    if current_month in [6, 7, 8]:  # Summer harvest season
+    if current_month in [6, 7, 8]:
         recommendations.append("🍑 Harvest season active - check fruit maturity daily in early fields.")
         recommendations.append("🚜 Coordinate bin placement and harvest crews.")
     
-    if current_month in [11, 12, 1, 2]:  # Dormant season
+    if current_month in [11, 12, 1, 2]:
         recommendations.append("✂️ Pruning season - ideal weather for orchard maintenance.")
         recommendations.append("🧊 Monitor chill hour accumulation for spring bloom timing.")
     
-    if current_month in [3, 4]:  # Bloom season
+    if current_month in [3, 4]:
         recommendations.append("🌸 Bloom season - monitor for frost protection needs.")
         recommendations.append("🐛 Scout for pest emergence with warming temperatures.")
     
     # Forecast-based recommendations
     if forecast:
-        temps = [f.get('temp', 0) for f in forecast[:8]]  # Next 24 hours
+        temps = [f.get('temp', 0) for f in forecast[:8]]
         if any(temp < 32 for temp in temps):
             recommendations.append("❄️ FROST WARNING! Prepare frost protection systems immediately.")
     
     return recommendations
 
 def get_field_priority(self, field_data: Dict, current_date: str) -> str:
-    """Determine field priority for daily checks"""
     variety = field_data.get('variety', '')
     
     # Check if in harvest window
     variety_info = self.peach_varieties.get(variety) or self.almond_varieties.get(variety)
     if variety_info:
-        # Simplified harvest window check (you'd want more sophisticated date parsing)
         return "High - Harvest Window" if "July" in variety_info.get('harvest_start', '') or "August" in variety_info.get('harvest_start', '') else "Medium"
     
     return "Low"
@@ -381,20 +373,17 @@ weather_service = WeatherService(OPENWEATHER_API_KEY) if OPENWEATHER_API_KEY els
 advisor = AgriculturalAdvisor()
 
 def load_fields():
-“”“Load field data from JSON”””
 if os.path.exists(FIELDS_MAP):
 with open(FIELDS_MAP, “r”) as f:
 return json.load(f)[“fields”]
 return []
 
 def get_total_acres():
-“”“Calculate total acres from field data”””
 fields = load_fields()
 total = sum(float(field.get(“acres”, 0)) for field in fields)
 return round(total, 1)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-“”“Welcome message with enhanced commands”””
 await update.message.reply_text(
 “🌳 Enhanced Farm Management Bot is LIVE!\n\n”
 “📊 **Data & Reports:**\n”
@@ -415,7 +404,6 @@ await update.message.reply_text(
 )
 
 async def show_map(update: Update, context: ContextTypes.DEFAULT_TYPE):
-“”“Display field map with enhanced info”””
 fields = load_fields()
 msg = “📍 **FIELD MAP & STATUS**\n\n”
 
@@ -426,8 +414,7 @@ for f in fields:
     msg += f"🌿 {f['variety']} • {f.get('acres', 0)} acres\n"
     msg += f"📋 Priority: {priority}\n\n"
 
-if len(msg) > 4000:  # Telegram message limit
-    # Split into multiple messages
+if len(msg) > 4000:
     messages = [msg[i:i+4000] for i in range(0, len(msg), 4000)]
     for message in messages:
         await update.message.reply_text(message, parse_mode='Markdown')
@@ -436,12 +423,10 @@ else:
 ```
 
 async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
-“”“Enhanced harvest and farm report”””
 total_bins = db.get_harvest_totals()
 total_acres = get_total_acres()
 
 ```
-# Get recent costs
 recent_costs = db.get_field_costs(days=30)
 total_cost = sum(cost['total_cost'] for cost in recent_costs)
 cost_per_acre = total_cost / total_acres if total_acres > 0 else 0
@@ -453,14 +438,13 @@ msg += f"💰 **30-Day Costs:** ${total_cost:,.2f} (${cost_per_acre:.2f}/acre)\n
 
 if recent_costs:
     msg += f"\n**Recent Expenses:**\n"
-    for cost in recent_costs[-5:]:  # Last 5 entries
+    for cost in recent_costs[-5:]:
         msg += f"• {cost['date']}: {cost['item_name']} - ${cost['total_cost']:.2f}\n"
 
 await update.message.reply_text(msg, parse_mode='Markdown')
 ```
 
 async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-“”“Get current weather and forecast”””
 if not weather_service:
 await update.message.reply_text(“⚠️ Weather service not configured. Add OPENWEATHER_API_KEY to .env file.”)
 return
@@ -481,8 +465,8 @@ if current:
 if forecast:
     msg += f"**3-Day Forecast:**\n"
     daily_forecasts = {}
-    for f in forecast[:24]:  # Next 24 3-hour periods = 3 days
-        date = f['datetime'][:10]  # Extract date
+    for f in forecast[:24]:
+        date = f['datetime'][:10]
         if date not in daily_forecasts:
             daily_forecasts[date] = {
                 'temps': [],
@@ -500,7 +484,6 @@ await update.message.reply_text(msg, parse_mode='Markdown')
 ```
 
 async def recommendations_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-“”“Get daily agricultural recommendations”””
 if not weather_service:
 await update.message.reply_text(“⚠️ Weather service needed for recommendations. Add OPENWEATHER_API_KEY to .env file.”)
 return
@@ -525,7 +508,6 @@ await update.message.reply_text(msg, parse_mode='Markdown')
 ```
 
 async def costs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-“”“View recent costs and expenses”””
 costs = db.get_field_costs(days=30)
 
 ```
@@ -533,7 +515,6 @@ if not costs:
     await update.message.reply_text("📊 No costs recorded in the last 30 days.")
     return
 
-# Group costs by category
 by_category = {}
 total = 0
 
@@ -551,8 +532,7 @@ for category, items in by_category.items():
     category_total = sum(item['total_cost'] for item in items)
     msg += f"**{category.title()}:** ${category_total:,.2f}\n"
     
-    # Show recent items in this category
-    for item in items[-3:]:  # Last 3 items
+    for item in items[-3:]:
         msg += f"• {item['date']}: {item['item_name']} (Field {item['field_id']}) - ${item['total_cost']:.2f}\n"
     msg += "\n"
 
@@ -560,7 +540,6 @@ await update.message.reply_text(msg, parse_mode='Markdown')
 ```
 
 async def log_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-“”“Interactive logging menu”””
 keyboard = [
 [InlineKeyboardButton(“🌾 Application”, callback_data=“log_application”)],
 [InlineKeyboardButton(“💰 Cost/Expense”, callback_data=“log_cost”)],
@@ -577,7 +556,6 @@ await update.message.reply_text(
 ```
 
 async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-“”“Handle button presses”””
 query = update.callback_query
 await query.answer()
 
@@ -613,10 +591,7 @@ elif query.data == "log_harvest":
     )
 ```
 
-# Command handlers for logging
-
 async def app_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-“”“Log application data”””
 try:
 args = context.args
 if len(args) < 6:
@@ -644,7 +619,6 @@ except Exception as e:
 ```
 
 async def cost_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-“”“Log cost data”””
 try:
 args = context.args
 if len(args) < 6:
@@ -674,7 +648,6 @@ except Exception as e:
 ```
 
 async def obs_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-“”“Log field observation”””
 try:
 args = context.args
 if len(args) < 4:
@@ -707,7 +680,6 @@ except Exception as e:
 ```
 
 async def harvest_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-“”“Log harvest data”””
 try:
 args = context.args
 if len(args) < 2:
@@ -718,7 +690,6 @@ return
     field_id, bins = args[:2]
     notes = " ".join(args[2:]) if len(args) > 2 else ""
     
-    # Get field variety
     fields = load_fields()
     field_data = next((f for f in fields if f['id'] == field_id), {})
     variety = field_data.get('variety', 'Unknown')
@@ -739,7 +710,6 @@ except Exception as e:
 ```
 
 async def priorities_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-“”“Show today’s field priorities”””
 fields = load_fields()
 current_date = datetime.now().strftime(’%Y-%m-%d’)
 
@@ -763,7 +733,7 @@ if high_priority:
     msg += "\n"
 
 msg += "**🟡 STANDARD MONITORING:**\n"
-for field, priority in medium_priority[:10]:  # Show first 10
+for field, priority in medium_priority[:10]:
     msg += f"• Field {field['id']} ({field['name']})\n"
 
 if len(medium_priority) > 10:
@@ -786,13 +756,12 @@ parse_mode=‘Markdown’
 )
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-“”“Enhanced message handler with natural language processing”””
 text = update.message.text.lower()
 today = datetime.now().strftime(”%Y-%m-%d”)
 fields = load_fields()
 
 ```
-# Try to parse harvest entries (existing functionality)
+# Try to parse harvest entries
 harvest_entries = []
 for field in fields:
     fid = field["id"]
@@ -807,7 +776,6 @@ for field in fields:
                 "bins": bins
             })
 
-# Log harvest entries
 if harvest_entries:
     for entry in harvest_entries:
         db.add_harvest_data(today, entry["field_id"], entry["variety"], entry["bins"])
@@ -835,7 +803,6 @@ if "spray" in text and ("field" in text or "block" in text):
         else:
             app_type = "spray"
         
-        # Find the field to get acres
         field_data = next((f for f in fields if f['id'] == field_id), None)
         acres = field_data.get('acres', 0) if field_data else 0
         
@@ -844,7 +811,7 @@ if "spray" in text and ("field" in text or "block" in text):
         await update.message.reply_text(f"✅ Application logged! {product} on Field {field_id} ({acres} acres).")
         return
 
-# Simple responses for common queries
+# Simple responses
 if "acre" in text or "how many acres" in text:
     acres = get_total_acres()
     await update.message.reply_text(f"🌳 You currently farm **{acres} acres** across all fields.", parse_mode='Markdown')
@@ -865,35 +832,7 @@ else:
     )
 ```
 
-async def daily_weather_update():
-“”“Fetch and store daily weather data”””
-if not weather_service:
-return
-
-```
-try:
-    current = await weather_service.get_current_weather(FARM_LAT, FARM_LON)
-    if current:
-        today = datetime.now().strftime('%Y-%m-%d')
-        weather_data = {
-            'temp_high': current.get('temp_high'),
-            'temp_low': current.get('temp_low'),
-            'temp_avg': current.get('temp_current'),
-            'humidity': current.get('humidity'),
-            'wind_speed': current.get('wind_speed'),
-            'precipitation': 0,  # Would need additional API call
-            'conditions': current.get('conditions'),
-            'soil_temp': None,  # Would need agricultural API
-            'uv_index': current.get('uv_index')
-        }
-        db.add_weather_data(today, weather_data)
-        print(f"Weather data updated for {today}")
-except Exception as e:
-    print(f"Error updating weather data: {e}")
-```
-
 def main():
-“”“Main bot function with all handlers”””
 if not TOKEN:
 print(“Error: TELEGRAM_BOT_TOKEN not found in environment variables”)
 return
@@ -901,7 +840,6 @@ return
 ```
 app = Application.builder().token(TOKEN).build()
 
-# Command handlers
 app.add_handler(CommandHandler("start", start))
 app.add_handler(CommandHandler("map", show_map))
 app.add_handler(CommandHandler("report", report))
@@ -913,22 +851,15 @@ app.add_handler(CommandHandler("acres", total_acres_command))
 app.add_handler(CommandHandler("dashboard", dashboard_command))
 app.add_handler(CommandHandler("log", log_command))
 
-# Logging command handlers
 app.add_handler(CommandHandler("app", app_command))
 app.add_handler(CommandHandler("cost", cost_command))
 app.add_handler(CommandHandler("obs", obs_command))
 app.add_handler(CommandHandler("harvest", harvest_command))
 
-# Callback handlers
 app.add_handler(CallbackQueryHandler(button_handler))
-
-# Message handler
 app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
 print("🌳 Enhanced Farm Management Bot is running!")
-print("Features: Weather monitoring, cost tracking, applications, recommendations")
-
-# Start the bot
 app.run_polling()
 ```
 
