@@ -10,7 +10,7 @@ load_dotenv()
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 
 # === YOUR DASHBOARD URL (CHANGE THIS) ===
-DASHBOARD_URL = "https://YOUR-DASHBOARD.onrender.com"   # ←←← REPLACE WITH YOUR REAL URL
+DASHBOARD_URL = "https://centennial-farming-dashboard.onrender.com"   # ←←← REPLACE WITH YOUR REAL URL
 
 # Load field map
 FIELDS_MAP = "fields_map.json"
