@@ -1,10 +1,12 @@
 import os
 import json
 import sqlite3
-from datetime import datetime
+import requests
+import re
+from datetime import datetime, time
 from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, JobQueue
 
 load_dotenv()
 
@@ -12,6 +14,13 @@ TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 DASHBOARD_URL = "https://centennial-farming-map.onrender.com"   # ← Replace with your real map URL
 
 DB_FILE = "farm_data.db"
+
+# Three localized weather areas
+WEATHER_LOCATIONS = {
+    "Johnston_BlueLupin": {"lat": 36.75, "lon": -119.82, "name": "Johnston / Blue Lupin Area"},
+    "Fagundes": {"lat": 36.70, "lon": -120.59, "name": "Fagundes Area"},
+    "Johnston_Block35": {"lat": 37.366, "lon": -120.651, "name": "Johnston Block 35 Area"}
+}
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -31,89 +40,103 @@ def get_total_acres():
     fields = load_fields()
     return round(sum(float(f.get("acres", 0)) for f in fields), 1)
 
-def get_acres_by_owner(owner):
+def get_acres_by_blocks_and_variety(block_list=None, variety_filter=None):
     fields = load_fields()
-    owner = owner.lower()
-    filtered = [f for f in fields if owner in f["name"].lower()]
-    return round(sum(float(f.get("acres", 0)) for f in filtered), 1)
+    total = 0
+    for f in fields:
+        fid = f["id"]
+        variety = f.get("variety", "").lower()
+        acres = float(f.get("acres", 0))
+        
+        # Check block match
+        block_match = True
+        if block_list:
+            block_match = any(str(fid) == str(b) for b in block_list)
+        
+        # Check variety match
+        variety_match = True
+        if variety_filter:
+            if variety_filter == "peach":
+                variety_match = "peach" in variety
+            elif variety_filter == "almond":
+                variety_match = "almond" in variety
+        
+        if block_match and variety_match:
+            total += acres
+    return round(total, 1)
+
+def get_weather(lat, lon):
+    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true&daily=precipitation_probability_max,temperature_2m_max&timezone=America/Los_Angeles"
+    try:
+        r = requests.get(url, timeout=10)
+        data = r.json()
+        current = data["current_weather"]
+        daily = data["daily"]
+        return {
+            "temp": round(current["temperature"]),
+            "wind": round(current["windspeed"]),
+            "rain_prob": daily["precipitation_probability_max"][0],
+            "max_temp": round(daily["temperature_2m_max"][0])
+        }
+    except:
+        return None
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🚀 **Advanced Centennial Farming Bot** is LIVE!\n\n"
-        "Commands:\n"
+        "🚀 **Centennial Farming Advanced Bot** is LIVE!\n\n"
+        "Try these:\n"
         "/dashboard → Client map\n"
-        "/map → All fields\n"
-        "/acres → Total or owner acres (try /acres Fagundes)\n"
-        "/report → Season summary\n"
+        "/weather → 3 localized reports\n"
+        "/acres → Total or specific (e.g. /acres Fagundes)\n"
         "/payroll → Cost breakdown\n\n"
-        "Just type: \"how many acres for Fagundes\" or \"Johnston total acres\""
+        "Natural examples:\n"
+        "“how many acres of peaches in blocks 66,77,18,2”\n"
+        "“almonds in block 35”\n"
+        "“Field 5 18 bins”"
     )
 
 async def dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🍑 **Centennial Farming Company Map**\n\n{DASHBOARD_URL}")
 
-async def show_map(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    fields = load_fields()
-    msg = "📍 **Your Fields**\n\n"
-    for f in fields:
-        msg += f"Field {f['id']} — {f['name']} — {f['variety']} — {f.get('acres',0)} acres\n"
+async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    msg = "🌤️ **Localized Weather Reports (3 Areas)**\n\n"
+    for key, loc in WEATHER_LOCATIONS.items():
+        weather = get_weather(loc["lat"], loc["lon"])
+        if weather:
+            msg += f"**{loc['name']}**\n"
+            msg += f"Temp: {weather['temp']}°F (high {weather['max_temp']}°F)\n"
+            msg += f"Rain chance: {weather['rain_prob']}%\n"
+            msg += f"Wind: {weather['wind']} mph\n\n"
     await update.message.reply_text(msg)
-
-async def total_acres(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    # Check if user specified an owner
-    args = context.args
-    if args:
-        owner = " ".join(args).lower()
-        if any(x in owner for x in ["fagundes", "johnston", "blue lupin"]):
-            acres = get_acres_by_owner(owner)
-            await update.message.reply_text(f"🌳 **{owner.title()}** acres: **{acres} acres**")
-            return
-    # Default to total
-    acres = get_total_acres()
-    await update.message.reply_text(f"🌳 You farm **{acres} acres** total across all ownerships.")
-
-async def report(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT SUM(bins) FROM harvest")
-    total_bins = c.fetchone()[0] or 0
-    conn.close()
-    await update.message.reply_text(f"📊 **Season Summary**\nTotal bins logged: {total_bins}")
-
-async def payroll(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    conn = sqlite3.connect(DB_FILE)
-    c = conn.cursor()
-    c.execute("SELECT SUM(bins) FROM harvest")
-    total_bins = c.fetchone()[0] or 0
-    conn.close()
-    worker_pay = total_bins * 30
-    your_cost = round(worker_pay * 1.35, 2)
-    await update.message.reply_text(f"💰 **Payroll Snapshot**\nWorker piece-rate: ${worker_pay}\nYour total cost (with 35% commission): ${your_cost}")
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.lower()
     today = datetime.now().strftime("%Y-%m-%d")
     fields = load_fields()
 
-    # Smart owner detection for natural questions
-    owner_keywords = {
-        "fagundes": "Fagundes",
-        "johnston": "Johnston",
-        "blue lupin": "Blue Lupin",
-        "blue lupin": "Blue Lupin"
-    }
-    detected_owner = None
-    for key, name in owner_keywords.items():
-        if key in text:
-            detected_owner = name
-            break
+    # === Smart Acreage Queries ===
+    # Look for block numbers
+    block_matches = re.findall(r'block\s*(\d+)', text) or re.findall(r'\b(\d{1,2})\b', text)
+    block_list = [int(b) for b in block_matches if b.isdigit()]
 
-    if detected_owner and ("acre" in text or "acres" in text):
-        acres = get_acres_by_owner(detected_owner)
-        await update.message.reply_text(f"🌳 **{detected_owner}** ownership: **{acres} acres**")
+    # Look for variety
+    variety_filter = None
+    if "peach" in text or "peaches" in text:
+        variety_filter = "peach"
+    elif "almond" in text or "almonds" in text:
+        variety_filter = "almond"
+
+    if block_list or variety_filter or "acre" in text or "acres" in text:
+        acres = get_acres_by_blocks_and_variety(block_list, variety_filter)
+        if block_list:
+            blocks_str = ", ".join(str(b) for b in block_list)
+            variety_str = f" of {variety_filter}s" if variety_filter else ""
+            await update.message.reply_text(f"🌳 **Blocks {blocks_str}**{variety_str}: **{acres} acres**")
+        else:
+            await update.message.reply_text(f"🌳 Total requested acres: **{acres} acres**")
         return
 
-    # Harvest logging
+    # === Harvest Logging ===
     entries = []
     for field in fields:
         fid = field["id"]
@@ -132,21 +155,17 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ **Logged!** {len(entries)} harvest entry(ies) saved.")
         return
 
-    # Fallback
-    await update.message.reply_text("Got it! Try /dashboard, /acres Fagundes, /payroll, or log harvest like 'Field 5 18 bins'.")
+    await update.message.reply_text("Got it! Try /weather, /dashboard, or log harvest like 'Field 5 18 bins'.")
 
 def main():
     app = Application.builder().token(TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("dashboard", dashboard))
-    app.add_handler(CommandHandler("map", show_map))
-    app.add_handler(CommandHandler("report", report))
-    app.add_handler(CommandHandler("payroll", payroll))
-    app.add_handler(CommandHandler("acres", total_acres))
+    app.add_handler(CommandHandler("weather", weather_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🚀 Advanced Centennial Farming Bot is running!")
+    print("🚀 Advanced Centennial Farming Bot with smart acreage parsing + 3 weather reports is running!")
     app.run_polling()
 
 if __name__ == "__main__":
