@@ -10,7 +10,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-DASHBOARD_URL = "https://centennial-farming-map.onrender.com"   # ← Update with your real URL if needed
+DASHBOARD_URL = "https://centennial-farming-map.onrender.com"   # ← Update with your real URL
 
 DB_FILE = "farm_data.db"
 
@@ -34,26 +34,30 @@ def get_total_acres():
 
 def get_acres_by_blocks_and_variety(block_list=None, variety_filter=None):
     fields = load_fields()
-    total = 0
+    peach_total = 0
+    almond_total = 0
     for f in fields:
         fid = f["id"]
         variety = f.get("variety", "").lower()
         acres = float(f.get("acres", 0))
         
+        # Block match
         block_match = True
         if block_list:
             block_match = any(str(fid) == str(b) for b in block_list)
         
-        variety_match = True
-        if variety_filter:
-            if variety_filter == "peach":
-                variety_match = "peach" in variety
-            elif variety_filter == "almond":
-                variety_match = "almond" in variety
-        
-        if block_match and variety_match:
-            total += acres
-    return round(total, 1)
+        if block_match:
+            if "peach" in variety:
+                peach_total += acres
+            elif "almond" in variety:
+                almond_total += acres
+    
+    if variety_filter == "peach":
+        return round(peach_total, 1)
+    elif variety_filter == "almond":
+        return round(almond_total, 1)
+    else:
+        return round(peach_total + almond_total, 1)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
@@ -87,8 +91,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         acres = get_acres_by_blocks_and_variety(block_list, variety_filter)
         if block_list:
             blocks_str = ", ".join(str(b) for b in block_list)
-            variety_str = f" {variety_filter}s" if variety_filter else ""
-            await update.message.reply_text(f"🌳 **Blocks {blocks_str}** have **{acres} acres**{variety_str}.")
+            if variety_filter:
+                await update.message.reply_text(f"🌳 Blocks {blocks_str} contain **{acres} acres** of {variety_filter}s.")
+            else:
+                await update.message.reply_text(f"🌳 Blocks {blocks_str} contain **{acres} acres** total.")
         else:
             await update.message.reply_text(f"🌳 You requested **{acres} acres** total.")
         return
@@ -120,7 +126,7 @@ def main():
     app.add_handler(CommandHandler("dashboard", dashboard))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🚀 Stable Centennial Farming Bot with natural acreage parsing is running!")
+    print("🚀 Stable Centennial Farming Bot with improved acreage parsing is running!")
     app.run_polling()
 
 if __name__ == "__main__":
