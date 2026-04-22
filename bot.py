@@ -10,7 +10,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-DASHBOARD_URL = "https://centennial-farming-map.onrender.com"   # ← CHANGE TO YOUR REAL DASHBOARD URL
+DASHBOARD_URL = "https://centennial-farming-map.onrender.com"   # ← Update with your real URL if needed
 
 DB_FILE = "farm_data.db"
 
@@ -57,8 +57,8 @@ def get_acres_by_blocks_and_variety(block_list=None, variety_filter=None):
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
-        "🚀 **Centennial Farming Bot** is LIVE!\n\n"
-        "Try these examples:\n"
+        "🚀 **Centennial Farming Advanced Bot** is LIVE!\n\n"
+        "Try natural questions like:\n"
         "“tell me how many acres of peaches and almonds are in blocks 66,77,18,2”\n"
         "“peaches in block 35”\n"
         "“how many acres in blocks 1 2 3”\n\n"
@@ -87,10 +87,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         acres = get_acres_by_blocks_and_variety(block_list, variety_filter)
         if block_list:
             blocks_str = ", ".join(str(b) for b in block_list)
-            variety_str = f" of {variety_filter}s" if variety_filter else ""
-            await update.message.reply_text(f"🌳 **Blocks {blocks_str}**{variety_str}: **{acres} acres**")
+            variety_str = f" {variety_filter}s" if variety_filter else ""
+            await update.message.reply_text(f"🌳 **Blocks {blocks_str}** have **{acres} acres**{variety_str}.")
         else:
-            await update.message.reply_text(f"🌳 Total requested acres: **{acres} acres**")
+            await update.message.reply_text(f"🌳 You requested **{acres} acres** total.")
         return
 
     # Harvest logging
@@ -120,7 +120,7 @@ def main():
     app.add_handler(CommandHandler("dashboard", dashboard))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🚀 Minimal Stable Bot with Smart Acreage Parsing is running!")
+    print("🚀 Stable Centennial Farming Bot with natural acreage parsing is running!")
     app.run_polling()
 
 if __name__ == "__main__":
