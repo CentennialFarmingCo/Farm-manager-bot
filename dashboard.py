@@ -7,8 +7,7 @@ import re
 st.set_page_config(page_title="Centennial Farming Company", page_icon="🍑", layout="wide")
 
 # Your logo
-st.image("https://raw.githubusercontent.com/CentennialFarmingCo/Farm-manager-bot/main/CENTENNIAL%201%20%20final%20Jpg.jpeg", width=600)", 
-         use_column_width=False, width=600)
+st.image("https://raw.githubusercontent.com/CentennialFarmingCo/Farm-manager-bot/main/CENTENNIAL%201%20%20final%20Jpg.jpeg", width=600)
 
 st.title("🍑 Centennial Farming Company")
 st.markdown("**Professional Interactive Field Map** — Current & Prospective Clients")
