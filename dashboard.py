@@ -8,7 +8,7 @@ import re
 st.set_page_config(page_title="Centennial Farming Company", page_icon="🍑", layout="wide")
 
 # === YOUR LOGO (upload logo.png to your GitHub repo first) ===
-st.image("https://raw.githubusercontent.com/YOUR-USERNAME/peach-harvest-bot/main/logo.png", 
+st.image("https://github.com/949b1582-7b89-4f17-bc50-c78df57e36dc", 
          use_column_width=True)
 
 st.title("🍑 Centennial Farming Company")
