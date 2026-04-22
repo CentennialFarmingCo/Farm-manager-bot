@@ -11,7 +11,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-DASHBOARD_URL = "https://centennial-farming-map.onrender.com"   # ← Replace with your real map URL
+DASHBOARD_URL = "https://centennial-farming-map.onrender.com"   # ← Update with your real URL if different
 
 DB_FILE = "farm_data.db"
 
@@ -48,12 +48,10 @@ def get_acres_by_blocks_and_variety(block_list=None, variety_filter=None):
         variety = f.get("variety", "").lower()
         acres = float(f.get("acres", 0))
         
-        # Check block match
         block_match = True
         if block_list:
             block_match = any(str(fid) == str(b) for b in block_list)
         
-        # Check variety match
         variety_match = True
         if variety_filter:
             if variety_filter == "peach":
@@ -84,15 +82,14 @@ def get_weather(lat, lon):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🚀 **Centennial Farming Advanced Bot** is LIVE!\n\n"
-        "Try these:\n"
+        "Try:\n"
         "/dashboard → Client map\n"
         "/weather → 3 localized reports\n"
         "/acres → Total or specific (e.g. /acres Fagundes)\n"
         "/payroll → Cost breakdown\n\n"
         "Natural examples:\n"
-        "“how many acres of peaches in blocks 66,77,18,2”\n"
-        "“almonds in block 35”\n"
-        "“Field 5 18 bins”"
+        "“tell me how many acres of peaches and almonds are in blocks 66,77,18,2”\n"
+        "“peaches in block 35”"
     )
 
 async def dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -114,12 +111,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     today = datetime.now().strftime("%Y-%m-%d")
     fields = load_fields()
 
-    # === Smart Acreage Queries ===
-    # Look for block numbers
+    # Smart acreage parsing for complex queries
     block_matches = re.findall(r'block\s*(\d+)', text) or re.findall(r'\b(\d{1,2})\b', text)
     block_list = [int(b) for b in block_matches if b.isdigit()]
 
-    # Look for variety
     variety_filter = None
     if "peach" in text or "peaches" in text:
         variety_filter = "peach"
@@ -136,7 +131,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"🌳 Total requested acres: **{acres} acres**")
         return
 
-    # === Harvest Logging ===
+    # Harvest logging
     entries = []
     for field in fields:
         fid = field["id"]
