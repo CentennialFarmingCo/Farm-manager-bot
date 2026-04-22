@@ -10,7 +10,7 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-DASHBOARD_URL = "https://centennial-farming-map.onrender.com"   # ← Replace with your real map URL
+DASHBOARD_URL = "https://centennial-farming-map.onrender.com"   # ← Make sure this is your real URL
 
 DB_FILE = "farm_data.db"
 
@@ -40,10 +40,12 @@ def get_acres_by_blocks_and_variety(block_list=None, variety_filter=None):
         variety = f.get("variety", "").lower()
         acres = float(f.get("acres", 0))
         
+        # Block match
         block_match = True
         if block_list:
             block_match = any(str(fid) == str(b) for b in block_list)
         
+        # Variety match
         variety_match = True
         if variety_filter:
             if variety_filter == "peach":
@@ -58,14 +60,13 @@ def get_acres_by_blocks_and_variety(block_list=None, variety_filter=None):
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🚀 **Centennial Farming Advanced Bot** is LIVE!\n\n"
-        "Commands:\n"
-        "/dashboard → Client map\n"
-        "/map → All fields\n"
-        "/report → Season summary\n"
-        "/payroll → Cost breakdown\n\n"
         "Try natural questions like:\n"
         "“tell me how many acres of peaches and almonds are in blocks 66,77,18,2”\n"
-        "“peaches in block 35”"
+        "“peaches in block 35”\n"
+        "“how many acres in blocks 1 2 3”\n\n"
+        "/dashboard → Client map\n"
+        "/report → Season summary\n"
+        "/payroll → Cost breakdown"
     )
 
 async def dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -76,16 +77,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     today = datetime.now().strftime("%Y-%m-%d")
     fields = load_fields()
 
-    # Smart acreage parsing
+    # === Improved Smart Acreage Parsing ===
+    # Find block numbers (handles commas, "blocks", "block", etc.)
     block_matches = re.findall(r'block\s*(\d+)', text) or re.findall(r'\b(\d{1,2})\b', text)
     block_list = [int(b) for b in block_matches if b.isdigit()]
 
+    # Variety filter
     variety_filter = None
-    if "peach" in text or "peaches" in text:
+    if any(word in text for word in ["peach", "peaches"]):
         variety_filter = "peach"
-    elif "almond" in text or "almonds" in text:
+    elif any(word in text for word in ["almond", "almonds"]):
         variety_filter = "almond"
 
+    # If we detected blocks or variety or the word "acre"
     if block_list or variety_filter or "acre" in text or "acres" in text:
         acres = get_acres_by_blocks_and_variety(block_list, variety_filter)
         if block_list:
@@ -96,7 +100,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"🌳 Total requested acres: **{acres} acres**")
         return
 
-    # Harvest logging
+    # === Harvest Logging ===
     entries = []
     for field in fields:
         fid = field["id"]
@@ -115,7 +119,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ **Logged!** {len(entries)} harvest entry(ies) saved.")
         return
 
-    await update.message.reply_text("Got it! Try /dashboard or log harvest like 'Field 5 18 bins'.")
+    await update.message.reply_text("Got it! Try a question like 'peaches in blocks 66 77' or log harvest like 'Field 5 18 bins'.")
 
 def main():
     app = Application.builder().token(TOKEN).build()
@@ -124,7 +128,7 @@ def main():
     app.add_handler(CommandHandler("dashboard", dashboard))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🚀 Stable Centennial Farming Bot is running!")
+    print("🚀 Stable Centennial Farming Bot with improved acreage parsing is running!")
     app.run_polling()
 
 if __name__ == "__main__":
