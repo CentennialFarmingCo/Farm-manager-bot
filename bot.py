@@ -1,12 +1,13 @@
 import os
 import json
 import sqlite3
-import requests
+import urllib.request
+import urllib.parse
 import re
-from datetime import datetime, time
+from datetime import datetime
 from dotenv import load_dotenv
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes, JobQueue
+from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 load_dotenv()
 
@@ -66,8 +67,8 @@ def get_acres_by_blocks_and_variety(block_list=None, variety_filter=None):
 def get_weather(lat, lon):
     url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true&daily=precipitation_probability_max,temperature_2m_max&timezone=America/Los_Angeles"
     try:
-        r = requests.get(url, timeout=10)
-        data = r.json()
+        with urllib.request.urlopen(url, timeout=10) as response:
+            data = json.loads(response.read())
         current = data["current_weather"]
         daily = data["daily"]
         return {
@@ -88,8 +89,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/acres → Total or specific (e.g. /acres Fagundes)\n"
         "/payroll → Cost breakdown\n\n"
         "Natural examples:\n"
-        "“tell me how many acres of peaches and almonds are in blocks 66,77,18,2”\n"
-        "“peaches in block 35”"
+        "“tell me how many acres of peaches and almonds are in blocks 66,77,18,2”"
     )
 
 async def dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -111,7 +111,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     today = datetime.now().strftime("%Y-%m-%d")
     fields = load_fields()
 
-    # Smart acreage parsing for complex queries
+    # Smart acreage parsing
     block_matches = re.findall(r'block\s*(\d+)', text) or re.findall(r'\b(\d{1,2})\b', text)
     block_list = [int(b) for b in block_matches if b.isdigit()]
 
