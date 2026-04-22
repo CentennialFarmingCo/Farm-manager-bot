@@ -10,18 +10,20 @@ st.set_page_config(page_title="Centennial Farming Company", page_icon="🍑", la
 st.title("🍑 Centennial Farming Company")
 st.markdown("**Professional Interactive Field Map** — Current & Prospective Clients")
 
-# Load data
 with open("fields_map.json", "r") as f:
     data = json.load(f)["fields"]
 
 df = pd.DataFrame(data)
 
-# SUPER CLEAN display name - removes all ownership prefixes
+# Extremely aggressive cleaning - removes ALL ownership prefixes
 def clean_name(name):
-    # Remove any ownership prefixes
-    name = re.sub(r'^(Johnston|Fagundes|Blue Lupin)\s*', '', name, flags=re.IGNORECASE).strip()
-    # Standardize "Block" format
-    name = re.sub(r'^\s*Block\s*', 'Block ', name)
+    # Remove known ownership prefixes
+    name = re.sub(r'^(Johnston|Fagundes|Blue Lupin)\s*', '', name, flags=re.IGNORECASE)
+    # Remove any text before "Block" or "Field"
+    name = re.sub(r'^.*?Block', 'Block', name, flags=re.IGNORECASE)
+    name = re.sub(r'^.*?Field', 'Field', name, flags=re.IGNORECASE)
+    # Clean extra spaces
+    name = re.sub(r'\s+', ' ', name).strip()
     return name
 
 df['display_name'] = df['name'].apply(clean_name)
@@ -36,7 +38,6 @@ col1.metric("Total Acres", f"{total_acres}")
 col2.metric("Peach Fields", peach_count)
 col3.metric("Almond Fields", almond_count)
 
-# Interactive Map
 st.subheader("Interactive Farm Boundaries")
 
 m = folium.Map(location=[37.41, -120.78], zoom_start=12, tiles="CartoDB positron")
