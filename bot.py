@@ -1,8 +1,6 @@
 import os
 import json
 import sqlite3
-import urllib.request
-import urllib.parse
 import re
 from datetime import datetime
 from dotenv import load_dotenv
@@ -12,16 +10,9 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-DASHBOARD_URL = "https://centennial-farming-map.onrender.com"   # ← Update with your real URL if different
+DASHBOARD_URL = "https://centennial-farming-map.onrender.com"   # ← Replace with your real map URL
 
 DB_FILE = "farm_data.db"
-
-# Three localized weather areas
-WEATHER_LOCATIONS = {
-    "Johnston_BlueLupin": {"lat": 36.75, "lon": -119.82, "name": "Johnston / Blue Lupin Area"},
-    "Fagundes": {"lat": 36.70, "lon": -120.59, "name": "Fagundes Area"},
-    "Johnston_Block35": {"lat": 37.366, "lon": -120.651, "name": "Johnston Block 35 Area"}
-}
 
 def init_db():
     conn = sqlite3.connect(DB_FILE)
@@ -64,47 +55,21 @@ def get_acres_by_blocks_and_variety(block_list=None, variety_filter=None):
             total += acres
     return round(total, 1)
 
-def get_weather(lat, lon):
-    url = f"https://api.open-meteo.com/v1/forecast?latitude={lat}&longitude={lon}&current_weather=true&daily=precipitation_probability_max,temperature_2m_max&timezone=America/Los_Angeles"
-    try:
-        with urllib.request.urlopen(url, timeout=10) as response:
-            data = json.loads(response.read())
-        current = data["current_weather"]
-        daily = data["daily"]
-        return {
-            "temp": round(current["temperature"]),
-            "wind": round(current["windspeed"]),
-            "rain_prob": daily["precipitation_probability_max"][0],
-            "max_temp": round(daily["temperature_2m_max"][0])
-        }
-    except:
-        return None
-
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "🚀 **Centennial Farming Advanced Bot** is LIVE!\n\n"
-        "Try:\n"
+        "Commands:\n"
         "/dashboard → Client map\n"
-        "/weather → 3 localized reports\n"
-        "/acres → Total or specific (e.g. /acres Fagundes)\n"
+        "/map → All fields\n"
+        "/report → Season summary\n"
         "/payroll → Cost breakdown\n\n"
-        "Natural examples:\n"
-        "“tell me how many acres of peaches and almonds are in blocks 66,77,18,2”"
+        "Try natural questions like:\n"
+        "“tell me how many acres of peaches and almonds are in blocks 66,77,18,2”\n"
+        "“peaches in block 35”"
     )
 
 async def dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"🍑 **Centennial Farming Company Map**\n\n{DASHBOARD_URL}")
-
-async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = "🌤️ **Localized Weather Reports (3 Areas)**\n\n"
-    for key, loc in WEATHER_LOCATIONS.items():
-        weather = get_weather(loc["lat"], loc["lon"])
-        if weather:
-            msg += f"**{loc['name']}**\n"
-            msg += f"Temp: {weather['temp']}°F (high {weather['max_temp']}°F)\n"
-            msg += f"Rain chance: {weather['rain_prob']}%\n"
-            msg += f"Wind: {weather['wind']} mph\n\n"
-    await update.message.reply_text(msg)
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = update.message.text.lower()
@@ -150,17 +115,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text(f"✅ **Logged!** {len(entries)} harvest entry(ies) saved.")
         return
 
-    await update.message.reply_text("Got it! Try /weather, /dashboard, or log harvest like 'Field 5 18 bins'.")
+    await update.message.reply_text("Got it! Try /dashboard or log harvest like 'Field 5 18 bins'.")
 
 def main():
     app = Application.builder().token(TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("dashboard", dashboard))
-    app.add_handler(CommandHandler("weather", weather_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     
-    print("🚀 Advanced Centennial Farming Bot with smart acreage parsing + 3 weather reports is running!")
+    print("🚀 Stable Centennial Farming Bot is running!")
     app.run_polling()
 
 if __name__ == "__main__":
