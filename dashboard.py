@@ -23,7 +23,7 @@ def clean_name(name):
     name = re.sub(r'\s+', ' ', name).strip()
     return name
 
-# Totals (pure Python, no pandas)
+# Totals (no pandas needed)
 total_acres = round(sum(float(field.get("acres", 0)) for field in data), 1)
 peach_count = sum(1 for f in data if "Peach" in f.get("variety", ""))
 almond_count = len(data) - peach_count
