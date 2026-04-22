@@ -2,14 +2,12 @@ import streamlit as st
 import folium
 from streamlit_folium import st_folium
 import json
-import pandas as pd
 import re
 
 st.set_page_config(page_title="Centennial Farming Company", page_icon="🍑", layout="wide")
 
-# === YOUR LOGO (upload logo.png to your GitHub repo first) ===
-st.image("https://raw.githubusercontent.com/CentennialFarmingCo/Farm-manager-bot/main/CENTENNIAL%201%20%20final%20Jpg.jpeg", 
-         use_column_width=True)
+# Your logo
+st.image("https://raw.githubusercontent.com/CentennialFarmingCo/Farm-manager-bot/main/CENTENNIAL%201%20%20final%20Jpg.jpeg", use_column_width=True)
 
 st.title("🍑 Centennial Farming Company")
 st.markdown("**Professional Interactive Field Map** — Current & Prospective Clients")
@@ -18,21 +16,17 @@ st.markdown("**Professional Interactive Field Map** — Current & Prospective Cl
 with open("fields_map.json", "r") as f:
     data = json.load(f)["fields"]
 
-df = pd.DataFrame(data)
-
-# Clean name for clients (no ownership prefixes)
+# Clean display name for clients (no ownership prefixes)
 def clean_name(name):
     name = re.sub(r'^(Johnston|Fagundes|Blue Lupin)\s*', '', name, flags=re.IGNORECASE)
     name = re.sub(r'^.*?Block', 'Block', name, flags=re.IGNORECASE)
     name = re.sub(r'\s+', ' ', name).strip()
     return name
 
-df['display_name'] = df['name'].apply(clean_name)
-
-# Totals
-total_acres = round(df["acres"].sum(), 1)
-peach_count = len(df[df["variety"].str.contains("Peach", na=False)])
-almond_count = len(df) - peach_count
+# Totals (pure Python, no pandas)
+total_acres = round(sum(float(field.get("acres", 0)) for field in data), 1)
+peach_count = sum(1 for f in data if "Peach" in f.get("variety", ""))
+almond_count = len(data) - peach_count
 
 col1, col2, col3 = st.columns(3)
 col1.metric("Total Acres", f"{total_acres}")
@@ -47,22 +41,22 @@ m = folium.Map(location=[37.41, -120.78], zoom_start=12, tiles="CartoDB positron
 peach_layer = folium.FeatureGroup(name="🌳 Peach Fields")
 almond_layer = folium.FeatureGroup(name="🌰 Almond Fields")
 
-for _, row in df.iterrows():
-    color = "#2E8B57" if "Peach" in row["variety"] else "#8B4513"
+for field in data:
+    color = "#2E8B57" if "Peach" in field.get("variety", "") else "#8B4513"
     folium.Polygon(
-        locations=row["polygon"],
+        locations=field["polygon"],
         color=color,
         weight=3,
         fill=True,
         fillOpacity=0.4,
         popup=folium.Popup(f"""
-            <b>{row['display_name']}</b><br>
-            {row['variety']}<br>
-            <b>{row['acres']} acres</b>
+            <b>{clean_name(field['name'])}</b><br>
+            {field['variety']}<br>
+            <b>{field['acres']} acres</b>
         """, max_width=300),
-        tooltip=row['display_name'],
+        tooltip=clean_name(field['name']),
         highlight_function=lambda x: {"weight": 5, "fillOpacity": 0.7}
-    ).add_to(peach_layer if "Peach" in row["variety"] else almond_layer)
+    ).add_to(peach_layer if "Peach" in field.get("variety", "") else almond_layer)
 
 peach_layer.add_to(m)
 almond_layer.add_to(m)
@@ -70,4 +64,4 @@ almond_layer.add_to(m)
 folium.LayerControl(collapsed=False).add_to(m)
 st_folium(m, width=1200, height=700)
 
-st.caption("✅ Click any shaded field for details • Hover for quick info • Toggle layers")
+st.caption("✅ Click any shaded field for details • Hover for quick info • Toggle layers on the right")
