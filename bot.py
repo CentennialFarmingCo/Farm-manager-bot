@@ -91,6 +91,8 @@ def init_db(db_file: str = None) -> None:
         conn.close()
     import irrigation
     irrigation.init_irrigation_db(path)
+    import spray
+    spray.init_spray_db(path)
 
 
 def load_fields(fields_file: str = None):
@@ -323,6 +325,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/dashboard → Client map\n"
         "/payroll → Full cost & payroll breakdown\n"
         "/irrigation → Log or check irrigation\n"
+        "/spray → Log spray applications & REI/PHI windows\n"
         "/today → Daily farm summary\n\n"
         "Harvest examples:\n"
         "“Block 4 18 bins” or “Block 36A 18 bins”\n\n"
@@ -333,7 +336,14 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/irrigation Block 5B stopped\n"
         "/irrigation status — running blocks\n"
         "/irrigation today — today's totals\n"
-        "/irrigation summary — last 7 days"
+        "/irrigation summary — last 7 days\n\n"
+        "Spray examples:\n"
+        "/spray Block 5B copper rei 12h phi 0d\n"
+        "/spray Block 36A sulfur rei 24h phi 1d notes mildew\n"
+        "/spray today — today's applications & restrictions\n"
+        "/spray open — active REI/PHI windows\n"
+        "/spray summary — last 7 days\n"
+        "(Spray logging is a recordkeeping aid — always follow the label.)"
     )
 
 
@@ -487,6 +497,83 @@ async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(text, parse_mode="Markdown")
 
 
+SPRAY_HELP = (
+    "🧪 *Spray / application logging*\n\n"
+    "Examples:\n"
+    "• `/spray Block 5B copper 80 gal rei 12h phi 0d`\n"
+    "• `/spray Block 36A sulfur rei 24h phi 1d notes mildew pressure`\n"
+    "• `/spray Block 4 nutrient foliar` (no REI/PHI — recordkeeping only)\n\n"
+    "Reports:\n"
+    "• `/spray today` — today's applications and any active restrictions\n"
+    "• `/spray open` (or `restrictions`) — active REI/PHI windows\n"
+    "• `/spray summary` — last 7 days\n\n"
+    "_This is a recordkeeping aid. Always follow the product label and "
+    "local regulations — the bot does not look up label restrictions._"
+)
+
+
+async def spray_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /spray with parser, today/open/summary subcommands."""
+    args_text = (update.message.text or "").strip()
+    parts = args_text.split(maxsplit=1)
+    body = parts[1].strip() if len(parts) > 1 else ""
+
+    if not body:
+        await update.message.reply_text(SPRAY_HELP, parse_mode="Markdown")
+        return
+
+    body_lc = body.lower()
+    if body_lc in ("today",):
+        await update.message.reply_text(_spray_today_text(), parse_mode="Markdown")
+        return
+    if body_lc in ("open", "restrictions", "restriction"):
+        await update.message.reply_text(_spray_open_text(), parse_mode="Markdown")
+        return
+    if body_lc in ("summary", "recent", "week", "weekly"):
+        await update.message.reply_text(_spray_summary_text(), parse_mode="Markdown")
+        return
+    if body_lc in ("help",):
+        await update.message.reply_text(SPRAY_HELP, parse_mode="Markdown")
+        return
+
+    await update.message.reply_text(_spray_log_text(body), parse_mode="Markdown")
+
+
+def _spray_log_text(body: str) -> str:
+    import spray
+    fields = load_fields()
+    parsed = spray.parse_spray_message(body, fields)
+    kind = parsed["kind"]
+    if kind == "unknown":
+        return "⚠️ I couldn't read that as a spray log. " + SPRAY_HELP
+    if kind == "ambiguous":
+        return f"⚠️ {parsed['reason']}"
+    if kind == "spray":
+        _row_id, rei_end, phi_end = spray.insert_spray_event(
+            parsed["field_id"], parsed["block_label"], parsed["field_name"],
+            parsed["product"], parsed.get("details", ""),
+            parsed.get("rei_hours"), parsed.get("phi_days"),
+            parsed.get("notes", ""),
+        )
+        return spray.format_logged(parsed, rei_end, phi_end)
+    return "⚠️ Unrecognized spray message."
+
+
+def _spray_today_text() -> str:
+    import spray
+    return spray.format_today(spray.list_today())
+
+
+def _spray_open_text() -> str:
+    import spray
+    return spray.format_active_restrictions(spray.list_active_restrictions())
+
+
+def _spray_summary_text() -> str:
+    import spray
+    return spray.format_summary(spray.list_recent(days=7), days=7)
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     fields = load_fields()
     parsed = parse_message(update.message.text, fields)
@@ -535,6 +622,7 @@ def main():
     app.add_handler(CommandHandler("irrigation", irrigation_command))
     app.add_handler(CommandHandler("water", irrigation_command))
     app.add_handler(CommandHandler("today", today_command))
+    app.add_handler(CommandHandler("spray", spray_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("🚀 Centennial Farming Bot with cost-per-ton payroll is running!")

@@ -120,6 +120,8 @@ Detaching the disk **deletes** all data on it.
 - `/dashboard` — sends a tap-to-open inline button (and plain link fallback) for the Vercel-hosted client map.
 - `/payroll` — total bins, worker pay, total cost, cost per ton.
 - `/irrigation` (alias `/water`) — log or check irrigation. See below.
+- `/spray` — log spray/pesticide applications and view active REI/PHI
+  windows. See [Spray log](#spray-log).
 - `/today` — daily farm summary (harvest bins, irrigation hours, open pump
   sessions, and labor cost). See [Daily summary](#daily-summary).
 
@@ -156,6 +158,52 @@ Beginner notes:
   (`farm_data.db` locally, or the path you set in `FARM_DB_FILE` on Render).
   Existing harvest data is never touched. The `irrigation_events` table is
   created on first use and migrated forward safely on every start.
+
+## Spray log
+
+`/spray` records pesticide / foliar / nutrient applications and (optionally)
+computes Re-Entry Interval (REI) and Pre-Harvest Interval (PHI) windows so
+you can see what's still under restriction.
+
+> **Important — read before using.** This is a *recordkeeping aid*. The bot
+> does **not** look up product label restrictions. REI and PHI values must
+> come from you (the product label / SDS / your PCA). When you omit them,
+> no restriction window is computed and the bot will say so. **Always
+> follow the pesticide label, the SDS, and local/state regulations** — the
+> label is the law. This bot is not legal, regulatory, or agronomic advice.
+
+### Logging applications
+
+| Example                                                               | What it does                                                                                       |
+| --------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| `/spray Block 5B copper 80 gal rei 12h phi 0d`                        | Logs copper at 80 gal on Block 5B with a 12-hour REI and 0-day PHI.                                |
+| `/spray Block 36A sulfur rei 24h phi 1d notes mildew pressure`        | Logs sulfur on Block 36A; "mildew pressure" is captured in notes.                                  |
+| `/spray Block 4 nutrient foliar`                                      | Logs the application without REI/PHI; bot replies it cannot compute a restriction window.         |
+
+REI accepts `rei 12h`, `rei 12 hours`, `rei 1d` (= 24h), or a bare number
+(`rei 12` is treated as hours). PHI accepts `phi 0d`, `phi 7 days`, `phi 48h`
+(= 2 days), or a bare number (treated as days).
+
+### Reports
+
+- `/spray today` — applications logged today, with REI/PHI status next to each.
+- `/spray open` (or `/spray restrictions`) — every spray whose REI or PHI is
+  still active, with the end timestamp and time remaining.
+- `/spray summary` — last 7 days of applications.
+
+### Notes & limitations
+
+- One block per message. `Block 4 and Block 5B copper` is rejected as
+  ambiguous — re-send each block separately.
+- Block-label semantics match the rest of the bot (`Block 4`, `Block 36A`,
+  `Block 5B`, `Block 56/58`).
+- Spray events are stored in the **same SQLite database** as harvest and
+  irrigation (`farm_data.db` locally, or `FARM_DB_FILE` on Render). The
+  `spray_events` table is created on first use; existing data is never
+  touched.
+- No reminders, alarms, or scheduled notifications are sent. Restriction
+  status is shown only when you explicitly ask via `/spray today` or
+  `/spray open`.
 
 ## Daily summary
 
