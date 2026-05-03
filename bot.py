@@ -330,7 +330,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/spray → Log spray applications & REI/PHI windows\n"
         "/task → Log farm/repair tasks (see /task help)\n"
         "/tasks → List open tasks\n"
-        "/today → Daily farm summary\n\n"
+        "/today → Daily farm summary\n"
+        "/weather (or /alerts) → Forecast + spray/heat/frost/rain alerts\n\n"
         "Harvest examples:\n"
         "“Block 4 18 bins” or “Block 36A 18 bins”\n\n"
         "Irrigation examples:\n"
@@ -506,6 +507,13 @@ async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     import daily_summary
     snapshot = daily_summary.collect_summary()
     text = daily_summary.format_summary(snapshot)
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
+async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """On-demand weather + operational alerts (no API key, no scheduler)."""
+    import weather
+    text = weather.get_weather_text()
     await update.message.reply_text(text, parse_mode="Markdown")
 
 
@@ -740,6 +748,8 @@ def main():
     app.add_handler(CommandHandler("irrigation", irrigation_command))
     app.add_handler(CommandHandler("water", irrigation_command))
     app.add_handler(CommandHandler("today", today_command))
+    app.add_handler(CommandHandler("weather", weather_command))
+    app.add_handler(CommandHandler("alerts", weather_command))
     app.add_handler(CommandHandler("spray", spray_command))
     app.add_handler(CommandHandler("task", task_command))
     app.add_handler(CommandHandler("tasks", task_command))
