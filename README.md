@@ -71,9 +71,48 @@ The bot uses long-polling, so it does not need a public port. The Streamlit
 dashboard service listens on `$PORT` provided by Render. The production map
 that `/dashboard` links to is hosted on Vercel separately.
 
-Note: SQLite on Render's free/starter disks is ephemeral. For durable harvest
-history, attach a persistent disk to the worker or migrate to a managed
-database.
+### Make harvest logs survive redeploys (persistent disk)
+
+By default, Render's filesystem is **ephemeral** — every redeploy or restart
+wipes `farm_data.db`, so all logged bins disappear. To keep harvest history,
+attach a Render **persistent disk** to the bot worker.
+
+The `render.yaml` blueprint in this repo already declares the disk. If your
+bot service was created from this blueprint, redeploying the latest commit
+attaches the disk automatically. If the service was created manually in the
+Render dashboard, follow these click-by-click steps once:
+
+1. Open <https://dashboard.render.com> and sign in.
+2. Click the **centennial-bot** worker service (the Telegram bot).
+3. In the left sidebar of the service, click **Disks**.
+4. Click **Add Disk**. Fill in:
+   - **Name:** `farm-data`
+   - **Mount Path:** `/var/data`
+   - **Size (GB):** `1` (you can grow it later, but you cannot shrink it)
+5. Click **Save**. Render will offer to redeploy — accept.
+6. In the same service, click **Environment** in the sidebar.
+7. Under **Environment Variables**, click **Add Environment Variable**:
+   - **Key:** `FARM_DB_FILE`
+   - **Value:** `/var/data/farm_data.db`
+8. Confirm `TELEGRAM_BOT_TOKEN` is still set as a secret here (do **not**
+   put it in `render.yaml` or commit it to git).
+9. Click **Save Changes**. Render redeploys.
+10. After the deploy finishes, click **Logs** in the sidebar. You should
+    see `🚀 Centennial Farming Bot ... is running!`. Send `/payroll` to
+    the bot in Telegram, log a test bin (e.g. `Block 4 1 bin`), then in
+    the Render dashboard click **Manual Deploy → Deploy latest commit**.
+    When the bot comes back, `/payroll` should still show that bin —
+    that confirms the disk is working.
+
+**Cost note:** persistent disks on Render require a paid plan (Starter and
+above). Disks are billed per GB per month on top of the service plan. See
+Render's pricing page for the current rate. The `1 GB` size in
+`render.yaml` is the minimum and is plenty for SQLite harvest logs.
+
+If you ever need to disable the disk, remove the `disk:` block from
+`render.yaml` (or detach the disk from the dashboard) and unset
+`FARM_DB_FILE` so the bot falls back to the local `farm_data.db` path.
+Detaching the disk **deletes** all data on it.
 
 ## Telegram bot commands
 

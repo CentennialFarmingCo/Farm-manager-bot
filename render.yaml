@@ -26,6 +26,14 @@ services:
     buildCommand: pip install -r requirements.txt
     startCommand: python bot.py
     autoDeploy: true
+    # Persistent disk so the SQLite harvest log survives redeploys/restarts.
+    # Render mounts this disk at the path below; FARM_DB_FILE points the bot
+    # at a file under that mount. NOTE: persistent disks require a paid
+    # Render plan (e.g. starter and up) and incur extra cost per GB.
+    disk:
+      name: farm-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - key: PYTHON_VERSION
         value: 3.12.8
@@ -33,3 +41,5 @@ services:
         sync: false
       - key: DASHBOARD_URL
         sync: false
+      - key: FARM_DB_FILE
+        value: /var/data/farm_data.db

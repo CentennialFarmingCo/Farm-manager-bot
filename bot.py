@@ -41,6 +41,27 @@ def normalize_dashboard_url(raw):
 DB_FILE = os.getenv("FARM_DB_FILE", "farm_data.db")
 FIELDS_FILE = os.getenv("FARM_FIELDS_FILE", "fields_map.json")
 
+
+def _ensure_db_parent_dir(path: str) -> None:
+    """Create the parent directory for a SQLite path if missing.
+
+    Render persistent disks mount at e.g. `/var/data`, and a fresh disk has
+    no subdirectories. sqlite3.connect() will not create parent dirs and
+    fails with a confusing "unable to open database file" otherwise.
+    """
+    parent = os.path.dirname(os.path.abspath(path))
+    if not parent or parent == os.sep:
+        return
+    try:
+        os.makedirs(parent, exist_ok=True)
+    except OSError as e:
+        raise RuntimeError(
+            f"Could not create directory for FARM_DB_FILE at {parent!r}: {e}. "
+            "On Render, make sure a persistent disk is attached and mounted "
+            "at the parent path (e.g. mountPath '/var/data' for "
+            "FARM_DB_FILE='/var/data/farm_data.db')."
+        ) from e
+
 # Block labels can be plain numbers ("4", "39"), suffixed ("36A", "5B"),
 # or composite ("56/58", "8/9"). Numeric ids in fields_map.json are internal
 # storage keys that may NOT equal the human block label, so user-facing
@@ -57,6 +78,7 @@ def _derive_block_label(name: str):
 
 def init_db(db_file: str = None) -> None:
     path = db_file or DB_FILE
+    _ensure_db_parent_dir(path)
     conn = sqlite3.connect(path)
     try:
         c = conn.cursor()
