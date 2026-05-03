@@ -119,8 +119,38 @@ Detaching the disk **deletes** all data on it.
 - `/start` — overview and examples.
 - `/dashboard` — sends a tap-to-open inline button (and plain link fallback) for the Vercel-hosted client map.
 - `/payroll` — total bins, worker pay, total cost, cost per ton.
+- `/irrigation` (alias `/water`) — log or check irrigation. See below.
 
 Free-text messages support:
 
 - Acreage queries: `"how many acres of peaches in blocks 1, 2, 3"`
 - Harvest logging: `"Field 5 18 bins"`
+
+## Irrigation tracking
+
+Log how long each block is irrigated so you can see water/pump efficiency
+across the season. Three input styles:
+
+| Style                   | Example                            | What it does                                          |
+| ----------------------- | ---------------------------------- | ----------------------------------------------------- |
+| One-shot **duration**   | `/irrigation Block 4 12 hours`     | Records 12 hours of irrigation on Block 4 today.      |
+| Pump **start**          | `/irrigation Block 5B started`     | Marks Block 5B as actively irrigating.                |
+| Pump **stop**           | `/irrigation Block 5B stopped`     | Closes the open session and computes hours from start.|
+
+Reports:
+
+- `/irrigation status` — blocks currently irrigating, with elapsed hours.
+- `/irrigation today` — total hours by block for today.
+- `/irrigation summary` — total hours by block over the last 7 days.
+
+Beginner notes:
+
+- The block label must match the human label on the field map (e.g. `Block 4`,
+  `Block 36A`, `Block 5B`, `Block 56/58`). Internal IDs are not exposed.
+- One block per message. `/irrigation Block 4 and Block 5B 6 hours` is rejected
+  as ambiguous — re-send each block separately.
+- Hours can be a decimal: `/water Block 4 1.5h` works.
+- Irrigation events are stored in the **same SQLite database** as harvest data
+  (`farm_data.db` locally, or the path you set in `FARM_DB_FILE` on Render).
+  Existing harvest data is never touched. The `irrigation_events` table is
+  created on first use and migrated forward safely on every start.
