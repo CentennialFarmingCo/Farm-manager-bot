@@ -1,0 +1,35 @@
+# Render blueprint for Centennial Farming bot + dashboard.
+# This documents the intended Render service layout. Existing Render
+# dashboard configuration takes precedence — review before applying.
+#
+# Two services:
+#   1. dashboard (web)  — Streamlit map, public.
+#   2. bot (worker)     — Telegram polling worker, no public port.
+#
+# Both share Python 3.12.8 (see runtime.txt).
+services:
+  - type: web
+    name: centennial-dashboard
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: streamlit run dashboard.py --server.port=$PORT --server.address=0.0.0.0 --server.headless=true
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+
+  - type: worker
+    name: centennial-bot
+    runtime: python
+    plan: starter
+    buildCommand: pip install -r requirements.txt
+    startCommand: python bot.py
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.12.8
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: DASHBOARD_URL
+        sync: false

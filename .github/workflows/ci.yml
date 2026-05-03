@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12.8"
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pytest pyflakes
+
+      - name: Compile all Python files
+        run: python -m compileall -q bot.py dashboard.py tests
+
+      - name: Lint (pyflakes, non-blocking informational)
+        run: pyflakes bot.py dashboard.py tests || true
+
+      - name: Validate JSON
+        run: python -c "import json; json.load(open('fields_map.json'))"
+
+      - name: Run tests
+        run: pytest -q
