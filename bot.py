@@ -322,7 +322,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "Commands:\n"
         "/dashboard → Client map\n"
         "/payroll → Full cost & payroll breakdown\n"
-        "/irrigation → Log or check irrigation\n\n"
+        "/irrigation → Log or check irrigation\n"
+        "/today → Daily farm summary\n\n"
         "Harvest examples:\n"
         "“Block 4 18 bins” or “Block 36A 18 bins”\n\n"
         "Irrigation examples:\n"
@@ -478,6 +479,14 @@ def _irrigation_summary_text() -> str:
     return irrigation.format_summary(rows, "💧 *Last 7 days irrigation:*")
 
 
+async def today_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Send a digest of today's harvest, irrigation, and labor totals."""
+    import daily_summary
+    snapshot = daily_summary.collect_summary()
+    text = daily_summary.format_summary(snapshot)
+    await update.message.reply_text(text, parse_mode="Markdown")
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     fields = load_fields()
     parsed = parse_message(update.message.text, fields)
@@ -525,6 +534,7 @@ def main():
     app.add_handler(CommandHandler("payroll", payroll))
     app.add_handler(CommandHandler("irrigation", irrigation_command))
     app.add_handler(CommandHandler("water", irrigation_command))
+    app.add_handler(CommandHandler("today", today_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("🚀 Centennial Farming Bot with cost-per-ton payroll is running!")
