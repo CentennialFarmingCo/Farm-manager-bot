@@ -259,6 +259,48 @@ def test_harvest_no_id_fallback_when_block_label_present():
     )
 
 
+def test_init_db_creates_parent_directory(tmp_path):
+    # Mirrors the Render persistent-disk case: FARM_DB_FILE points at a
+    # nested path whose parent directory does not yet exist. init_db must
+    # create the parent rather than crashing in sqlite3.connect().
+    nested = tmp_path / "var" / "data" / "farm_data.db"
+    assert not nested.parent.exists()
+    bot.init_db(str(nested))
+    assert nested.exists()
+    assert nested.parent.is_dir()
+
+
+def test_init_db_unwritable_parent_raises_clear_error(tmp_path, monkeypatch):
+    # If the parent path can't be created (e.g. wrong permissions on the
+    # mounted disk), surface a RuntimeError that names FARM_DB_FILE so a
+    # first-time operator can connect the failure to the env var.
+    def boom(*args, **kwargs):
+        raise OSError("read-only file system")
+
+    monkeypatch.setattr(bot.os, "makedirs", boom)
+    target = tmp_path / "no" / "such" / "farm.db"
+    try:
+        bot.init_db(str(target))
+    except RuntimeError as e:
+        assert "FARM_DB_FILE" in str(e)
+    else:
+        raise AssertionError("expected RuntimeError when parent dir cannot be created")
+
+
+def test_env_configured_db_path_round_trip(tmp_path, monkeypatch):
+    # FARM_DB_FILE under a nested, not-yet-existing dir (the persistent-disk
+    # shape) must be readable and writable end-to-end after import.
+    db = tmp_path / "var" / "data" / "farm.db"
+    monkeypatch.setenv("FARM_DB_FILE", str(db))
+    import importlib
+    importlib.reload(bot)
+    assert bot.DB_FILE == str(db)
+    bot.init_db()
+    bot.insert_harvest([("2026-05-03", "5", "Almond", 7)])
+    assert bot.total_bins() == 7
+    assert db.exists()
+
+
 def test_payroll_total_bins_logging_unchanged(tmp_path):
     # Confirms harvest write path → payroll readback path is untouched.
     db = tmp_path / "farm.db"
