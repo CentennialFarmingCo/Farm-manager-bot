@@ -57,10 +57,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🚀 **Centennial Farming Advanced Bot** is LIVE!\n\n"
         "Commands:\n"
         "/dashboard → Client map\n"
-        "/weather → 3 localized reports\n"
-        "/acres → Total or specific blocks\n"
-        "/payroll → Full cost & payroll breakdown\n"
-        "/report → Season summary\n\n"
+        "/payroll → Full cost & payroll breakdown\n\n"
         "Natural examples:\n"
         "“tell me how many acres of peaches and almonds are in blocks 66,77,18,2”\n"
         "“Field 5 18 bins”"
@@ -95,8 +92,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     today = datetime.now().strftime("%Y-%m-%d")
     fields = load_fields()
 
-    # Smart acreage parsing
-    block_matches = re.findall(r'block\s*(\d+)', text) or re.findall(r'\b(\d{1,2})\b', text)
+    is_harvest_log = bool(re.search(r'\d+\s*bin', text))
+
+    # Smart acreage parsing — only when this isn't a "N bins" harvest log,
+    # so phrases like "Field 5 18 bins" don't get treated as block IDs.
+    if is_harvest_log:
+        block_matches = re.findall(r'block\s*(\d+)', text) + re.findall(r'field\s*(\d+)', text)
+    else:
+        block_matches = re.findall(r'block\s*(\d+)', text) or re.findall(r'\b(\d{1,2})\b', text)
     block_list = [int(b) for b in block_matches if b.isdigit()]
 
     variety_filter = None
@@ -105,7 +108,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     elif any(w in text for w in ["almond", "almonds"]):
         variety_filter = "almond"
 
-    if block_list or variety_filter or "acre" in text or "acres" in text:
+    if not is_harvest_log and (block_list or variety_filter or "acre" in text):
         acres = get_acres_by_blocks_and_variety(block_list, variety_filter)
         if block_list:
             blocks_str = ", ".join(str(b) for b in block_list)
@@ -115,13 +118,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.message.reply_text(f"🌳 Total requested acres: **{acres} acres**")
         return
 
-    # Harvest logging
+    # Harvest logging — match explicit "field N" / "block N" only to avoid
+    # substring false positives (e.g. id "1" matching "block 18").
     entries = []
+    bins_match = re.search(r'(\d+)\s*bin', text)
+    bins = int(bins_match.group(1)) if bins_match else 0
     for field in fields:
-        fid = field["id"]
-        if f"field {fid}" in text or f"block {fid}" in text or fid in text:
-            bins_match = re.search(r'(\d+)\s*bin', text)
-            bins = int(bins_match.group(1)) if bins_match else 0
+        fid = str(field["id"])
+        if re.search(rf'\b(?:field|block)\s*{re.escape(fid)}\b', text):
             entries.append((today, fid, field["variety"], bins))
 
     if entries:
@@ -136,6 +140,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text("Got it! Try /payroll, /dashboard, or log harvest like 'Field 5 18 bins'.")
 
 def main():
+    if not TOKEN:
+        raise RuntimeError(
+            "TELEGRAM_BOT_TOKEN is not set. Copy .env.example to .env and set the token."
+        )
     app = Application.builder().token(TOKEN).build()
     
     app.add_handler(CommandHandler("start", start))
