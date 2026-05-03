@@ -1,5 +1,5 @@
-streamlit
-folium
-streamlit-folium
-python-telegram-bot
-python-dotenv
+streamlit>=1.40,<2
+folium>=0.17,<1
+streamlit-folium>=0.20,<1
+python-telegram-bot>=21,<23
+python-dotenv>=1.0,<2
