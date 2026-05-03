@@ -89,6 +89,8 @@ def init_db(db_file: str = None) -> None:
         conn.commit()
     finally:
         conn.close()
+    import irrigation
+    irrigation.init_irrigation_db(path)
 
 
 def load_fields(fields_file: str = None):
@@ -319,10 +321,18 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "🚀 **Centennial Farming Advanced Bot** is LIVE!\n\n"
         "Commands:\n"
         "/dashboard → Client map\n"
-        "/payroll → Full cost & payroll breakdown\n\n"
-        "Natural examples:\n"
-        "“tell me how many acres of peaches and almonds are in blocks 66,77,18,2”\n"
-        "“Block 4 18 bins” or “Block 36A 18 bins”"
+        "/payroll → Full cost & payroll breakdown\n"
+        "/irrigation → Log or check irrigation\n\n"
+        "Harvest examples:\n"
+        "“Block 4 18 bins” or “Block 36A 18 bins”\n\n"
+        "Irrigation examples:\n"
+        "/irrigation Block 4 12 hours\n"
+        "/water Block 36A 8 hours\n"
+        "/irrigation Block 5B started\n"
+        "/irrigation Block 5B stopped\n"
+        "/irrigation status — running blocks\n"
+        "/irrigation today — today's totals\n"
+        "/irrigation summary — last 7 days"
     )
 
 
@@ -364,6 +374,108 @@ async def payroll(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"**Cost per ton: ${cost_per_ton}**\n\n"
         f"Updated live as you log bins."
     )
+
+
+IRRIGATION_HELP = (
+    "💧 *Irrigation logging*\n\n"
+    "Examples:\n"
+    "• `/irrigation Block 4 12 hours`\n"
+    "• `/water Block 36A 8 hours`\n"
+    "• `/irrigation Block 5B started`\n"
+    "• `/irrigation Block 5B stopped`\n"
+    "• `/irrigation status` — currently running\n"
+    "• `/irrigation today` — today's totals by block\n"
+    "• `/irrigation summary` — last 7 days totals"
+)
+
+
+async def irrigation_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /irrigation and /water with irrigation_text()."""
+    args_text = (update.message.text or "").strip()
+    parts = args_text.split(maxsplit=1)
+    body = parts[1].strip() if len(parts) > 1 else ""
+
+    if not body:
+        await update.message.reply_text(IRRIGATION_HELP, parse_mode="Markdown")
+        return
+
+    body_lc = body.lower()
+    if body_lc in ("status", "running"):
+        await update.message.reply_text(_irrigation_status_text(), parse_mode="Markdown")
+        return
+    if body_lc in ("today",):
+        await update.message.reply_text(_irrigation_today_text(), parse_mode="Markdown")
+        return
+    if body_lc in ("summary", "week", "weekly"):
+        await update.message.reply_text(_irrigation_summary_text(), parse_mode="Markdown")
+        return
+
+    await update.message.reply_text(_irrigation_log_text(body), parse_mode="Markdown")
+
+
+def _irrigation_log_text(body: str) -> str:
+    import irrigation
+    fields = load_fields()
+    parsed = irrigation.parse_irrigation_message(body, fields)
+    kind = parsed["kind"]
+    if kind == "unknown":
+        return (
+            "⚠️ I couldn't read that as irrigation. " + IRRIGATION_HELP
+        )
+    if kind == "ambiguous":
+        return f"⚠️ {parsed['reason']}"
+    if kind == "irrigation_duration":
+        irrigation.insert_duration_event(
+            parsed["field_id"], parsed["block_label"], parsed["field_name"],
+            parsed["hours"], parsed.get("notes", ""),
+        )
+        return (
+            f"✅ Logged *{parsed['hours']}h* of irrigation on "
+            f"*Block {parsed['block_label']}*."
+        )
+    if kind == "irrigation_start":
+        row_id, already = irrigation.insert_start_event(
+            parsed["field_id"], parsed["block_label"], parsed["field_name"],
+            parsed.get("notes", ""),
+        )
+        if already is not None:
+            return (
+                f"⚠️ *Block {parsed['block_label']}* is already irrigating "
+                f"(open session id {already}). Send 'stopped' first."
+            )
+        return f"💧 Started irrigating *Block {parsed['block_label']}* (id {row_id})."
+    if kind == "irrigation_stop":
+        stop_id, hours, start_iso = irrigation.insert_stop_event(
+            parsed["field_id"], parsed["block_label"], parsed["field_name"],
+            parsed.get("notes", ""),
+        )
+        if stop_id is None:
+            return (
+                f"⚠️ No open irrigation session found for "
+                f"*Block {parsed['block_label']}*. Send 'started' first."
+            )
+        return (
+            f"🛑 Stopped *Block {parsed['block_label']}* — duration *{hours}h* "
+            f"(started {start_iso})."
+        )
+    return "⚠️ Unrecognized irrigation message."
+
+
+def _irrigation_status_text() -> str:
+    import irrigation
+    return irrigation.format_open_sessions(irrigation.list_open_sessions())
+
+
+def _irrigation_today_text() -> str:
+    import irrigation
+    rows = irrigation.summarize_today()
+    return irrigation.format_summary(rows, "💧 *Today's irrigation:*")
+
+
+def _irrigation_summary_text() -> str:
+    import irrigation
+    rows = irrigation.summarize_recent(days=7)
+    return irrigation.format_summary(rows, "💧 *Last 7 days irrigation:*")
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -411,6 +523,8 @@ def main():
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("dashboard", dashboard))
     app.add_handler(CommandHandler("payroll", payroll))
+    app.add_handler(CommandHandler("irrigation", irrigation_command))
+    app.add_handler(CommandHandler("water", irrigation_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("🚀 Centennial Farming Bot with cost-per-ton payroll is running!")
