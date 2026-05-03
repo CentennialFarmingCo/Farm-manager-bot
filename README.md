@@ -49,6 +49,15 @@ pytest
 | `DASHBOARD_URL`        | no       | `https://centennial-farm-dashboard-qvytatulr.vercel.app`   | Public URL the `/dashboard` command links to (Vercel production).    |
 | `FARM_DB_FILE`         | no       | `farm_data.db`                                             | Path to SQLite database                                              |
 | `FARM_FIELDS_FILE`     | no       | `fields_map.json`                                          | Path to fields source data                                           |
+| `FARM_LAT`             | no       | `37.30`                                                    | Latitude used by `/weather`. Default is Merced County, CA.           |
+| `FARM_LON`             | no       | `-120.48`                                                  | Longitude used by `/weather`.                                        |
+| `FARM_LOCATION_NAME`   | no       | `Merced County, CA`                                        | Label printed on the `/weather` summary.                             |
+| `WIND_ALERT_MPH`       | no       | `10`                                                       | Spray-caution wind threshold (mph).                                  |
+| `HEAT_ALERT_F`         | no       | `95`                                                       | Heat-caution high-temp threshold (°F).                               |
+| `FROST_ALERT_F`        | no       | `34`                                                       | Frost-caution low-temp threshold (°F).                               |
+| `RAIN_PROB_ALERT_PCT`  | no       | `50`                                                       | Rain-caution probability threshold (%).                              |
+| `RAIN_AMOUNT_ALERT_IN` | no       | `0.10`                                                     | Rain-caution accumulation threshold (inches).                        |
+| `WEATHER_API_TIMEOUT`  | no       | `8`                                                        | HTTP timeout for the Open-Meteo call (seconds).                      |
 
 If `DASHBOARD_URL` is missing a scheme it is coerced to `https://`. If the
 value is unparseable, `/dashboard` returns a setup hint instead of an error.
@@ -127,6 +136,9 @@ Detaching the disk **deletes** all data on it.
 - `/task` / `/tasks` — log farm/repair tasks with optional block, priority,
   and notes; list open tasks, close them by id, or pull a summary. See
   [Task / repair tracking](#task--repair-tracking).
+- `/weather` (alias `/alerts`) — on-demand forecast plus operational
+  alerts (spray wind, heat, frost, rain, irrigation hint). See
+  [Weather alerts](#weather-alerts).
 
 Free-text messages support:
 
@@ -310,3 +322,60 @@ Tap /dashboard for the field map.
 
 If nothing has been logged yet today, `/today` returns a friendly empty
 state with example commands for harvest and irrigation logging.
+
+## Weather alerts
+
+`/weather` (alias `/alerts`) returns the current conditions and today's
+forecast for the farm, plus a set of conservative operational alerts. It
+is **on-demand only** — there is no scheduler, no DB write, and no
+notification push. Each call hits Open-Meteo's free, key-less forecast
+API and renders one short Telegram message.
+
+### What the alerts cover
+
+| Alert            | Default rule                              | Env var(s)                              |
+| ---------------- | ----------------------------------------- | --------------------------------------- |
+| Spray caution    | Current/gust/forecast wind ≥ 10 mph       | `WIND_ALERT_MPH`                        |
+| Heat caution     | Today's high ≥ 95 °F                      | `HEAT_ALERT_F`                          |
+| Frost caution    | Today's low ≤ 34 °F                       | `FROST_ALERT_F`                         |
+| Rain caution     | Probability ≥ 50% **or** ≥ 0.10 in. rain  | `RAIN_PROB_ALERT_PCT`, `RAIN_AMOUNT_ALERT_IN` |
+| Irrigation hint  | Hot **and** dry day (extra: also windy)   | combination of the above                |
+
+Alerts only ever surface when you call `/weather` — nothing is pushed.
+All thresholds are configurable via environment variables (see the table
+in [Environment variables](#environment-variables)).
+
+### Configuring location
+
+Defaults point at Merced County, CA (37.30, -120.48). To run for another
+ranch, set `FARM_LAT`, `FARM_LON`, and optionally `FARM_LOCATION_NAME` on
+the bot service. No API key is needed — Open-Meteo is free and keyless.
+
+Example:
+
+```
+/weather
+```
+
+```
+🌤 Weather — Merced County, CA
+Now: 86°F, wind 8 mph (gusts 12 mph)
+Today: high 99°F, low 62°F, rain 0.00 in (10% chance)
+
+*Alerts:*
+• 🌬 Spray caution: wind up to 12 mph (threshold 10 mph). Hold off on spraying.
+• 🥵 Heat caution: high 99°F (threshold 95°F). Start crews early; water often.
+• 💧 Irrigation note: hot and dry plus wind — expect high ET, consider extending today's set.
+
+_Source: Open-Meteo (no API key). Thresholds are configurable; always use your own judgment in the field._
+```
+
+### Notes & limitations
+
+- If the weather API times out or returns a bad response, `/weather`
+  returns a one-line "service unavailable" message — the bot does not
+  crash, and no DB writes happen.
+- Thresholds are intentionally conservative defaults; tune them via env
+  vars if your operation runs hotter or windier.
+- This is a decision-support aid. Always cross-check with on-the-ground
+  observation before spraying, harvesting, or running frost protection.
