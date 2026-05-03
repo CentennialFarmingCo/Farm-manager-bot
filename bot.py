@@ -3,17 +3,40 @@ import json
 import sqlite3
 import re
 from datetime import datetime
+from urllib.parse import urlparse, urlunparse
 from dotenv import load_dotenv
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
 
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-DASHBOARD_URL = os.getenv(
-    "DASHBOARD_URL",
-    "https://centennial-farming-map.onrender.com",
-)
+# Default points at the live Vercel deployment. Override DASHBOARD_URL to
+# point at a preview, staging, or replacement host without redeploying.
+DEFAULT_DASHBOARD_URL = "https://centennial-farm-dashboard-qvytatulr.vercel.app"
+DASHBOARD_URL = os.getenv("DASHBOARD_URL", DEFAULT_DASHBOARD_URL)
+
+
+def normalize_dashboard_url(raw):
+    """Return an http(s) URL string, or None if the input cannot be salvaged.
+
+    Telegram's inline URL buttons reject non-http(s) URLs and bare hostnames,
+    so we coerce a missing scheme to https and reject anything still missing
+    a host after that.
+    """
+    if not raw or not isinstance(raw, str):
+        return None
+    candidate = raw.strip()
+    if not candidate:
+        return None
+    parsed = urlparse(candidate)
+    if not parsed.scheme:
+        parsed = urlparse("https://" + candidate)
+    if parsed.scheme not in ("http", "https"):
+        return None
+    if not parsed.netloc or "." not in parsed.netloc:
+        return None
+    return urlunparse(parsed)
 
 DB_FILE = os.getenv("FARM_DB_FILE", "farm_data.db")
 FIELDS_FILE = os.getenv("FARM_FIELDS_FILE", "fields_map.json")
@@ -282,7 +305,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def dashboard(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(f"🍑 **Centennial Farming Company Map**\n\n{DASHBOARD_URL}")
+    url = normalize_dashboard_url(DASHBOARD_URL)
+    if url is None:
+        await update.message.reply_text(
+            "⚠️ Dashboard link is not configured.\n\n"
+            "Ask an admin to set the DASHBOARD_URL environment variable on "
+            "the bot service (e.g. https://your-dashboard.example.com)."
+        )
+        return
+
+    keyboard = InlineKeyboardMarkup(
+        [[InlineKeyboardButton("🌳 Open Centennial Farm Dashboard", url=url)]]
+    )
+    await update.message.reply_text(
+        "🍑 *Centennial Farming Company Dashboard*\n\n"
+        "Live field map, varieties, and harvest snapshot.\n"
+        "Tap the button below to open it in your browser.\n\n"
+        f"Direct link: {url}",
+        reply_markup=keyboard,
+        disable_web_page_preview=False,
+    )
 
 
 async def payroll(update: Update, context: ContextTypes.DEFAULT_TYPE):
