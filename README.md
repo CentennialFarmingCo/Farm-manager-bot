@@ -120,6 +120,8 @@ Detaching the disk **deletes** all data on it.
 - `/dashboard` — sends a tap-to-open inline button (and plain link fallback) for the Vercel-hosted client map.
 - `/payroll` — total bins, worker pay, total cost, cost per ton.
 - `/irrigation` (alias `/water`) — log or check irrigation. See below.
+- `/today` — daily farm summary (harvest bins, irrigation hours, open pump
+  sessions, and labor cost). See [Daily summary](#daily-summary).
 
 Free-text messages support:
 
@@ -154,3 +156,48 @@ Beginner notes:
   (`farm_data.db` locally, or the path you set in `FARM_DB_FILE` on Render).
   Existing harvest data is never touched. The `irrigation_events` table is
   created on first use and migrated forward safely on every start.
+
+## Daily summary
+
+`/today` reads the same SQLite database and returns a single digest of
+today's farm activity. It does not write data, does not call any external
+service, and does not schedule anything — it is a pull-only command.
+
+The digest includes, when data is available for today:
+
+- **Harvest** — bins per block (with variety) and a daily total.
+- **Irrigation** — completed hours per block plus any *currently running*
+  pump sessions (started but not yet stopped).
+- **Labor cost** — bins × $30 worker pay × 1.35 commission, mirroring
+  `/payroll` but scoped to today only.
+
+Example:
+
+```
+/today
+```
+
+```
+📋 Daily farm summary — 2026-05-03
+
+🍑 Harvest today:
+• Block 4: 18 bins — Parade Freestone Peach
+Total: 18 bins
+
+💧 Irrigation today:
+• Block 36A: 4.0h
+Total: 4.0h
+
+🟢 Currently irrigating:
+• Block 5B (since 2026-05-03T08:12:00-07:00, 1.5h elapsed)
+
+💰 Labor today:
+• Bins: 18
+• Worker pay: $540
+• Total cost (35% commission): $729.0
+
+Tap /dashboard for the field map.
+```
+
+If nothing has been logged yet today, `/today` returns a friendly empty
+state with example commands for harvest and irrigation logging.
