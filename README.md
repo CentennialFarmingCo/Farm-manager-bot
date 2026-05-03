@@ -124,6 +124,9 @@ Detaching the disk **deletes** all data on it.
   windows. See [Spray log](#spray-log).
 - `/today` — daily farm summary (harvest bins, irrigation hours, open pump
   sessions, and labor cost). See [Daily summary](#daily-summary).
+- `/task` / `/tasks` — log farm/repair tasks with optional block, priority,
+  and notes; list open tasks, close them by id, or pull a summary. See
+  [Task / repair tracking](#task--repair-tracking).
 
 Free-text messages support:
 
@@ -204,6 +207,64 @@ REI accepts `rei 12h`, `rei 12 hours`, `rei 1d` (= 24h), or a bare number
 - No reminders, alarms, or scheduled notifications are sent. Restriction
   status is shown only when you explicitly ask via `/spray today` or
   `/spray open`.
+
+## Task / repair tracking
+
+`/task` records field operations and repair items so nothing falls through the
+cracks. Tasks may be tied to a block (e.g. *"Block 36A repair valve"*) or
+recorded as general farm tasks with no block. There are no scheduled
+reminders — tasks are surfaced only when you ask.
+
+### Logging tasks
+
+| Example                                                  | What it does                                                       |
+| -------------------------------------------------------- | ------------------------------------------------------------------ |
+| `/task fix leak Block 4`                                 | Logs a task on Block 4 with normal priority.                       |
+| `/task Block 36A repair valve priority high`             | Logs a high-priority task on Block 36A.                            |
+| `/task order parts for tractor priority urgent`          | Logs a general (no-block) urgent task.                             |
+| `/task paint shed notes weather permitting`              | Captures `weather permitting` in the notes field.                  |
+
+Priorities: `low`, `normal` (default), `high`, `urgent`. Either `priority
+high` or a bare word like `urgent` / `high priority` is recognized. `medium`
+is treated as `normal`. If a message references multiple blocks, the bot
+asks you to send one block per message; if it references no block, the
+task is saved as a general farm task.
+
+### Reports
+
+| Command                | What it shows                                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------------------------- |
+| `/tasks`               | All open tasks ordered by priority (urgent → high → normal → low) and then age.                   |
+| `/task open`           | Same as `/tasks`.                                                                                  |
+| `/task done <id>`      | Closes a task by id. Returns what was closed; warns if the id is unknown or already done.         |
+| `/task Block 5B`       | Lists open + recent done tasks for that block (when the message has only a block ref, no title). |
+| `/task summary`        | Open count by priority and recent (last 7 days) closed tasks.                                     |
+
+Example:
+
+```
+/tasks
+```
+
+```
+🛠 *Open tasks:*
+🔴 #4 [urgent] general: order parts for tractor (2h)
+🟠 #1 [high] Block 36A: repair valve (1d)
+• #2 [normal] Block 4: fix leak (1d)
+· #3 [low] general: paint the shed (3h)
+```
+
+### Notes & limitations
+
+- Block-label semantics match the rest of the bot (`Block 4`, `Block 36A`,
+  `Block 5B`, `Block 56/58`).
+- One block per task message — `Block 4 and Block 5B fix leak` is rejected as
+  ambiguous.
+- Tasks are stored in the **same SQLite database** as harvest, irrigation,
+  and spray (`farm_data.db` locally, or `FARM_DB_FILE` on Render). The
+  `tasks` table is created on first use; existing data is never touched.
+- No reminders, alarms, or scheduled notifications are sent. Tasks surface
+  only when you ask via `/tasks` or `/task summary`.
 
 ## Daily summary
 

@@ -93,6 +93,8 @@ def init_db(db_file: str = None) -> None:
     irrigation.init_irrigation_db(path)
     import spray
     spray.init_spray_db(path)
+    import tasks
+    tasks.init_tasks_db(path)
 
 
 def load_fields(fields_file: str = None):
@@ -326,6 +328,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/payroll → Full cost & payroll breakdown\n"
         "/irrigation → Log or check irrigation\n"
         "/spray → Log spray applications & REI/PHI windows\n"
+        "/task → Log farm/repair tasks (see /task help)\n"
+        "/tasks → List open tasks\n"
         "/today → Daily farm summary\n\n"
         "Harvest examples:\n"
         "“Block 4 18 bins” or “Block 36A 18 bins”\n\n"
@@ -343,7 +347,15 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/spray today — today's applications & restrictions\n"
         "/spray open — active REI/PHI windows\n"
         "/spray summary — last 7 days\n"
-        "(Spray logging is a recordkeeping aid — always follow the label.)"
+        "(Spray logging is a recordkeeping aid — always follow the label.)\n\n"
+        "Task examples:\n"
+        "/task fix leak Block 4\n"
+        "/task Block 36A repair valve priority high\n"
+        "/task order parts for tractor priority urgent\n"
+        "/tasks — open tasks (or /task open)\n"
+        "/task done 3 — close task by id\n"
+        "/task Block 5B — tasks for that block\n"
+        "/task summary — counts and recent activity"
     )
 
 
@@ -574,6 +586,112 @@ def _spray_summary_text() -> str:
     return spray.format_summary(spray.list_recent(days=7), days=7)
 
 
+TASK_HELP = (
+    "🛠 *Task / repair tracking*\n\n"
+    "Examples:\n"
+    "• `/task fix leak Block 4`\n"
+    "• `/task Block 36A repair valve priority high`\n"
+    "• `/task order parts for tractor priority urgent`\n"
+    "• `/task Block 5B` — list tasks for that block\n\n"
+    "Reports:\n"
+    "• `/tasks` (or `/task open`) — open tasks by priority\n"
+    "• `/task done <id>` — close a task by id\n"
+    "• `/task summary` — open counts and recent closes\n\n"
+    "Priorities: low, normal (default), high, urgent. Add `priority high` "
+    "or just `urgent` anywhere in the message."
+)
+
+
+_TASK_DONE_RE = re.compile(r'^(?:done|close|complete|completed)\s+(\d+)\b', re.IGNORECASE)
+
+
+async def task_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Handle /task and /tasks."""
+    args_text = (update.message.text or "").strip()
+    parts = args_text.split(maxsplit=1)
+    cmd = parts[0].lstrip("/").lower()
+    body = parts[1].strip() if len(parts) > 1 else ""
+
+    if cmd == "tasks":
+        body_lc = body.lower()
+        if body_lc in ("", "open", "list", "all"):
+            await update.message.reply_text(_task_open_text(), parse_mode="Markdown")
+            return
+        if body_lc in ("summary", "recent"):
+            await update.message.reply_text(_task_summary_text(), parse_mode="Markdown")
+            return
+        if body_lc in ("help",):
+            await update.message.reply_text(TASK_HELP, parse_mode="Markdown")
+            return
+        # Fallthrough: treat the body as a task creation just like /task body.
+        await update.message.reply_text(_task_dispatch(body), parse_mode="Markdown")
+        return
+
+    if not body:
+        await update.message.reply_text(TASK_HELP, parse_mode="Markdown")
+        return
+
+    await update.message.reply_text(_task_dispatch(body), parse_mode="Markdown")
+
+
+def _task_dispatch(body: str) -> str:
+    body_lc = body.lower()
+    if body_lc in ("help",):
+        return TASK_HELP
+    if body_lc in ("open", "list", "all"):
+        return _task_open_text()
+    if body_lc in ("summary", "recent"):
+        return _task_summary_text()
+    done_match = _TASK_DONE_RE.match(body)
+    if done_match:
+        return _task_done_text(done_match.group(1))
+    return _task_log_text(body)
+
+
+def _task_log_text(body: str) -> str:
+    import tasks as tasks_mod
+    fields = load_fields()
+    parsed = tasks_mod.parse_task_message(body, fields)
+    kind = parsed["kind"]
+    if kind == "unknown":
+        return "⚠️ I couldn't read that as a task. " + TASK_HELP
+    if kind == "ambiguous":
+        return f"⚠️ {parsed['reason']}"
+    if kind == "list_for_block":
+        items = tasks_mod.list_for_field(parsed["field_id"], include_done=True)
+        return tasks_mod.format_block_list(items, parsed["block_label"])
+    if kind == "task":
+        task_id = tasks_mod.insert_task(
+            title=parsed["title"],
+            field_id=parsed.get("field_id"),
+            block_label=parsed.get("block_label"),
+            field_name=parsed.get("field_name"),
+            priority=parsed.get("priority", "normal"),
+            notes=parsed.get("notes", ""),
+        )
+        created = tasks_mod.get_task(task_id)
+        if created is None:
+            return "⚠️ Task could not be saved."
+        return tasks_mod.format_logged(created)
+    return "⚠️ Unrecognized task message."
+
+
+def _task_open_text() -> str:
+    import tasks as tasks_mod
+    return tasks_mod.format_open_list(tasks_mod.list_open())
+
+
+def _task_summary_text() -> str:
+    import tasks as tasks_mod
+    return tasks_mod.format_summary(tasks_mod.summary())
+
+
+def _task_done_text(raw_id: str) -> str:
+    import tasks as tasks_mod
+    status, task = tasks_mod.close_task(raw_id)
+    return tasks_mod.format_close_result(status, task)
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     fields = load_fields()
     parsed = parse_message(update.message.text, fields)
@@ -623,6 +741,8 @@ def main():
     app.add_handler(CommandHandler("water", irrigation_command))
     app.add_handler(CommandHandler("today", today_command))
     app.add_handler(CommandHandler("spray", spray_command))
+    app.add_handler(CommandHandler("task", task_command))
+    app.add_handler(CommandHandler("tasks", task_command))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
     print("🚀 Centennial Farming Bot with cost-per-ton payroll is running!")
