@@ -46,7 +46,7 @@ pytest
 | Variable               | Required | Default                                                    | Notes                                                                |
 | ---------------------- | -------- | ---------------------------------------------------------- | -------------------------------------------------------------------- |
 | `TELEGRAM_BOT_TOKEN`   | yes      | —                                                          | From @BotFather on Telegram. Store as a Render secret, never in git. |
-| `DASHBOARD_URL`        | no       | `https://centennial-farm-dashboard-qvytatulr.vercel.app`   | Public URL the `/dashboard` command links to (Vercel production).    |
+| `DASHBOARD_URL`        | no       | `https://centennial-farm-dashboard-five.vercel.app`        | Public URL the `/dashboard` command links to (Vercel production alias). |
 | `FARM_DB_FILE`         | no       | `farm_data.db`                                             | Path to SQLite database                                              |
 | `FARM_FIELDS_FILE`     | no       | `fields_map.json`                                          | Path to fields source data                                           |
 | `FARM_LAT`             | no       | `37.30`                                                    | Latitude used by `/weather`. Default is Merced County, CA.           |

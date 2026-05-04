@@ -193,6 +193,23 @@ def _fmt_num(v, suffix: str = "", decimals: int = 1) -> str:
     return "—"
 
 
+# Telegram legacy Markdown treats `_`, `*`, `` ` `` and `[` as formatting
+# delimiters. The dashboard JSON owns block names, varieties, crop and pest
+# labels — any of which may contain those characters (e.g. an underscore in
+# a cultivar code) and break parse_mode='Markdown'. Escape every dashboard-
+# controlled string before interpolating into a Markdown message.
+_MD_SPECIALS = ("\\", "_", "*", "`", "[")
+
+
+def _md_escape(value) -> str:
+    if value is None:
+        return "—"
+    s = str(value)
+    for ch in _MD_SPECIALS:
+        s = s.replace(ch, "\\" + ch)
+    return s
+
+
 def _crop_pest_summary(blocks: list, degree_days: dict) -> list:
     """Group blocks by (crop, pestModelKey) and emit one summary line each.
 
@@ -236,8 +253,8 @@ def _crop_pest_summary(blocks: list, degree_days: dict) -> list:
             ddf = dd[pest_key].get("cumulativeDDF")
         pest_label = pest_name or pest_key or "—"
         lines.append(
-            f"• {crop}: {v['count']} blocks ({_fmt_num(v['acres'], ' ac', 0)})"
-            f" — {pest_label}: {_fmt_num(ddf, ' DDF')}"
+            f"• {_md_escape(crop)}: {v['count']} blocks ({_fmt_num(v['acres'], ' ac', 0)})"
+            f" — {_md_escape(pest_label)}: {_fmt_num(ddf, ' DDF')}"
         )
     return lines
 
@@ -252,11 +269,20 @@ def _block_highlight_lines(blocks: list, limit: int = MAX_BLOCK_HIGHLIGHTS) -> l
         return []
     valid = [b for b in blocks if isinstance(b, dict)]
 
+    # Sort key: smaller is earlier (more prominent). Valid acres → -acres so
+    # the largest block wins. Malformed/missing/non-positive acres → +inf so
+    # they sink to the bottom and never outrank a real positive-acre block,
+    # regardless of magnitude. (The previous fallback of 0 tied with valid
+    # 0-acre rows and could leapfrog tiny-positive-acre rows in edge cases.)
     def acres_key(b):
+        raw = b.get("acres")
         try:
-            return -float(b.get("acres") or 0)
+            v = float(raw)
         except (TypeError, ValueError):
-            return 0
+            return float("inf")
+        if v <= 0:
+            return float("inf")
+        return -v
 
     top = sorted(valid, key=acres_key)[:limit]
     lines = []
@@ -265,8 +291,8 @@ def _block_highlight_lines(blocks: list, limit: int = MAX_BLOCK_HIGHLIGHTS) -> l
         ddf = pm.get("cumulativeDDF") if isinstance(pm, dict) else None
         chill = b.get("chillPortions")
         lines.append(
-            f"• {b.get('block', '—')} ({_fmt_num(b.get('acres'), ' ac', 0)},"
-            f" {b.get('variety', '—')}) —"
+            f"• {_md_escape(b.get('block') or '—')} ({_fmt_num(b.get('acres'), ' ac', 0)},"
+            f" {_md_escape(b.get('variety') or '—')}) —"
             f" chill {_fmt_num(chill, '')}, DDF {_fmt_num(ddf, '')}"
         )
     return lines
@@ -297,7 +323,7 @@ def _chill_line(payload: dict) -> str:
     season_str = ""
     start, end = season.get("start"), season.get("end")
     if start and end:
-        season_str = f" (season {start} → {end})"
+        season_str = f" (season {_md_escape(start)} → {_md_escape(end)})"
     return f"❄️ Chill portions: {range_str}{season_str}"
 
 
@@ -320,9 +346,9 @@ def _degree_day_lines(payload: dict) -> list:
             range_str = f", {lo:.0f}–{hi:.0f}°F"
         window_str = ""
         if biofix and window_end:
-            window_str = f" (biofix {biofix} → {window_end})"
+            window_str = f" (biofix {_md_escape(biofix)} → {_md_escape(window_end)})"
         out.append(
-            f"• {pest}: {_fmt_num(ddf, ' DDF')}{range_str}{window_str}"
+            f"• {_md_escape(pest)}: {_fmt_num(ddf, ' DDF')}{range_str}{window_str}"
         )
     return out
 
@@ -345,17 +371,17 @@ def format_summary(payload: dict, dashboard_url: Optional[str] = None) -> str:
     station = metadata.get("station") or {}
     station_name = station.get("name") or "—"
     station_id = station.get("id")
-    station_str = f"{station_name}"
+    station_str = f"{_md_escape(station_name)}"
     if station_id:
-        station_str += f" (CIMIS #{station_id})"
+        station_str += f" (CIMIS #{_md_escape(station_id)})"
 
     today_local = metadata.get("todayLocal")
     generated_at = metadata.get("generatedAt")
     when_bits = []
     if today_local:
-        when_bits.append(f"local {today_local}")
+        when_bits.append(f"local {_md_escape(today_local)}")
     if generated_at:
-        when_bits.append(f"generated {generated_at}")
+        when_bits.append(f"generated {_md_escape(generated_at)}")
     when_str = " · ".join(when_bits) if when_bits else "—"
 
     lines = [
@@ -387,7 +413,7 @@ def format_summary(payload: dict, dashboard_url: Optional[str] = None) -> str:
 
     if dashboard_url:
         lines.append("")
-        lines.append(f"_See full dashboard: {dashboard_url}_")
+        lines.append(f"See full dashboard: {_md_escape(dashboard_url)}")
 
     lines.append("")
     lines.append(
@@ -429,9 +455,9 @@ def format_block(block: dict, payload: dict, dashboard_url: Optional[str] = None
     station_name = station.get("name") or "—"
 
     lines = [
-        f"📅 *{name}*",
-        f"{ranch + ' · ' if ranch else ''}{crop} · {variety} · "
-        f"{_fmt_num(acres, ' ac', 0)}",
+        f"📅 *{_md_escape(name)}*",
+        f"{_md_escape(ranch) + ' · ' if ranch else ''}{_md_escape(crop)} · "
+        f"{_md_escape(variety)} · {_fmt_num(acres, ' ac', 0)}",
         "",
         f"❄️ Chill portions: {_fmt_num(chill, '', 2)}",
     ]
@@ -441,20 +467,26 @@ def format_block(block: dict, payload: dict, dashboard_url: Optional[str] = None
             range_str = f", {lo:.0f}–{hi:.0f}°F"
         window_str = ""
         if biofix and window_end:
-            window_str = f" (biofix {biofix} → {window_end})"
-        lines.append(f"🐛 {pest}: {_fmt_num(ddf, ' DDF')}{range_str}{window_str}")
+            window_str = f" (biofix {_md_escape(biofix)} → {_md_escape(window_end)})"
+        lines.append(
+            f"🐛 {_md_escape(pest)}: {_fmt_num(ddf, ' DDF')}{range_str}{window_str}"
+        )
 
     if today_local or station_id:
         meta_bits = []
         if station_id:
-            meta_bits.append(f"CIMIS #{station_id} {station_name}")
+            meta_bits.append(
+                f"CIMIS #{_md_escape(station_id)} {_md_escape(station_name)}"
+            )
         if today_local:
-            meta_bits.append(f"local {today_local}")
+            meta_bits.append(f"local {_md_escape(today_local)}")
         lines.append("")
-        lines.append("_" + " · ".join(meta_bits) + "_")
+        # Plain text — italicizing user-controlled metadata risks breaking
+        # parse_mode if any field already contains an underscore.
+        lines.append(" · ".join(meta_bits))
 
     if dashboard_url:
-        lines.append(f"_See full dashboard: {dashboard_url}_")
+        lines.append(f"See full dashboard: {_md_escape(dashboard_url)}")
 
     lines.append(
         "_Decision-support only — confirm with UC IPM and your PCA before "

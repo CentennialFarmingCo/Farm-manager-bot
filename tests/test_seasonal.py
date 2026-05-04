@@ -613,3 +613,195 @@ def test_seasonal_command_skips_button_when_dashboard_url_invalid(monkeypatch):
 
     args, kwargs = update.message.reply_text.call_args
     assert kwargs.get("reply_markup") is None
+
+
+def test_seasonal_command_button_defaults_to_public_alias(monkeypatch):
+    """With no DASHBOARD_URL env override, the /seasonal button must point at
+    the public production alias, not the stale protected preview host."""
+    monkeypatch.delenv("DASHBOARD_URL", raising=False)
+    importlib.reload(bot)
+
+    import seasonal as seasonal_mod
+    monkeypatch.setattr(
+        seasonal_mod, "get_seasonal_text", lambda query=None, opener=None: "ok",
+    )
+
+    update = _fake_update("/seasonal")
+    _run(bot.seasonal_command(update, MagicMock()))
+
+    args, kwargs = update.message.reply_text.call_args
+    markup = kwargs.get("reply_markup")
+    assert isinstance(markup, InlineKeyboardMarkup)
+    btn = markup.inline_keyboard[0][0]
+    assert btn.url == "https://centennial-farm-dashboard-five.vercel.app"
+    # And the seasonal JSON fetch derives the same host by default.
+    assert seasonal.resolve_seasonal_url() == (
+        "https://centennial-farm-dashboard-five.vercel.app/phenology-summary.json"
+    )
+
+
+def test_default_seasonal_url_uses_public_alias(monkeypatch):
+    monkeypatch.delenv("DASHBOARD_URL", raising=False)
+    monkeypatch.delenv("SEASONAL_URL", raising=False)
+    assert seasonal.DEFAULT_DASHBOARD_URL == (
+        "https://centennial-farm-dashboard-five.vercel.app"
+    )
+    assert seasonal.resolve_seasonal_url() == (
+        "https://centennial-farm-dashboard-five.vercel.app/phenology-summary.json"
+    )
+
+
+# --- Markdown escaping ----------------------------------------------------
+
+
+def test_md_escape_escapes_telegram_specials():
+    s = seasonal._md_escape("Block_1*x[y]`z")
+    # Underscore, asterisk, backtick, and opening bracket are escaped; closing
+    # bracket is left alone (Telegram legacy Markdown only treats the opener).
+    assert s == "Block\\_1\\*x\\[y]\\`z"
+
+
+def test_md_escape_handles_none_and_non_strings():
+    assert seasonal._md_escape(None) == "—"
+    assert seasonal._md_escape(33) == "33"
+
+
+def test_md_escape_escapes_backslashes_first():
+    # A bare backslash is itself a Markdown escape character; round-trip
+    # behavior must escape it to avoid swallowing the next character.
+    assert seasonal._md_escape("a\\b") == "a\\\\b"
+
+
+def test_format_summary_escapes_block_name_underscore():
+    """Block names with `_` (or other Markdown specials) must not break the
+    parse_mode='Markdown' send. Regression for the dashboard-controlled
+    field injection issue."""
+    p = make_payload()
+    p["blocks"][0]["block"] = "Johnston_Block_1"
+    p["blocks"][0]["variety"] = "Kaweah*Special"
+    text = seasonal.format_summary(p)
+    # Underscore in the rendered name is escaped, not interpreted as italic.
+    assert "Johnston\\_Block\\_1" in text
+    assert "Kaweah\\*Special" in text
+    # Equal numbers of unescaped underscores → safe to send as Markdown.
+    assert _unescaped_specials_balanced(text)
+
+
+def test_format_summary_escapes_pest_name_specials():
+    p = make_payload()
+    p["degreeDays"]["peachTwigBorer"]["pest"] = "Peach_twig*borer"
+    p["blocks"][0]["pestModel"]["pest"] = "Peach_twig*borer"
+    text = seasonal.format_summary(p)
+    assert "Peach\\_twig\\*borer" in text
+    assert _unescaped_specials_balanced(text)
+
+
+def test_format_summary_escapes_crop_label():
+    p = make_payload()
+    p["blocks"][0]["crop"] = "Free_stone Peach"
+    text = seasonal.format_summary(p)
+    assert "Free\\_stone Peach" in text
+
+
+def test_format_block_escapes_dashboard_fields():
+    p = make_payload()
+    block = {
+        "block": "Block_1*x",
+        "ranch": "Test_Ranch",
+        "crop": "Free_stone",
+        "variety": "Kaweah*Code",
+        "acres": 10,
+        "chillPortions": 60.0,
+        "pestModel": {
+            "pest": "Pest_with_underscore",
+            "biofix": "2026-01-01",
+            "windowEnd": "2026-05-03",
+            "cumulativeDDF": 100.0,
+            "lowerF": 50,
+            "upperF": 88,
+        },
+    }
+    text = seasonal.format_block(block, p, dashboard_url="https://x_y.example.com")
+    assert "Block\\_1\\*x" in text
+    assert "Test\\_Ranch" in text
+    assert "Free\\_stone" in text
+    assert "Kaweah\\*Code" in text
+    assert "Pest\\_with\\_underscore" in text
+    assert "x\\_y.example.com" in text
+    assert _unescaped_specials_balanced(text)
+
+
+def _unescaped_specials_balanced(text: str) -> bool:
+    """Sanity check: each Markdown delimiter (`_`, `*`, `` ` ``) must occur
+    an even number of times when not preceded by a backslash, so Telegram
+    can match opening and closing markers. Underscores/asterisks inside
+    dashboard-controlled values should always be escaped, not raw.
+    """
+    for ch in ("_", "*", "`"):
+        count = 0
+        i = 0
+        while i < len(text):
+            if text[i] == ch and (i == 0 or text[i - 1] != "\\"):
+                count += 1
+            i += 1
+        if count % 2 != 0:
+            return False
+    return True
+
+
+# --- _block_highlight_lines sort tiebreak ---------------------------------
+
+
+def test_block_highlight_lines_sinks_malformed_acres():
+    """Malformed acres ('N/A', None, non-numeric) must rank below every block
+    with a real positive acres value, regardless of how small."""
+    blocks = [
+        {"block": "Tiny", "acres": 0.1, "variety": "v"},
+        {"block": "Garbage", "acres": "not-a-number", "variety": "v"},
+        {"block": "Missing", "variety": "v"},  # no acres key
+        {"block": "None", "acres": None, "variety": "v"},
+        {"block": "Big", "acres": 50, "variety": "v"},
+    ]
+    lines = seasonal._block_highlight_lines(blocks, limit=10)
+    assert len(lines) == 5
+    # Find the index of each named block in the rendered output.
+    order = [next(i for i, ln in enumerate(lines) if name in ln)
+             for name in ("Big", "Tiny", "Garbage", "Missing", "None")]
+    big_idx, tiny_idx, garbage_idx, missing_idx, none_idx = order
+    # Valid positive-acre blocks must precede every malformed/missing one.
+    assert big_idx < garbage_idx
+    assert big_idx < missing_idx
+    assert big_idx < none_idx
+    assert tiny_idx < garbage_idx
+    assert tiny_idx < missing_idx
+    assert tiny_idx < none_idx
+
+
+def test_block_highlight_lines_sinks_zero_acres_blocks():
+    """A 0-acre or negative-acre block has nothing operationally interesting
+    to highlight; it should sink below positive-acre blocks too."""
+    blocks = [
+        {"block": "Zero", "acres": 0, "variety": "v"},
+        {"block": "Neg", "acres": -5, "variety": "v"},
+        {"block": "Real", "acres": 1.5, "variety": "v"},
+    ]
+    lines = seasonal._block_highlight_lines(blocks, limit=10)
+    real_idx = next(i for i, ln in enumerate(lines) if "Real" in ln)
+    zero_idx = next(i for i, ln in enumerate(lines) if "Zero" in ln)
+    neg_idx = next(i for i, ln in enumerate(lines) if "Neg" in ln)
+    assert real_idx < zero_idx
+    assert real_idx < neg_idx
+
+
+def test_block_highlight_lines_orders_valid_blocks_by_acres_desc():
+    """Pure ordering check among valid positive-acre blocks: largest first."""
+    blocks = [
+        {"block": "A", "acres": 5, "variety": "v"},
+        {"block": "B", "acres": 50, "variety": "v"},
+        {"block": "C", "acres": 20, "variety": "v"},
+    ]
+    lines = seasonal._block_highlight_lines(blocks, limit=10)
+    # Rendered top-to-bottom should be B, C, A.
+    assert "B" in lines[0]
+    assert "C" in lines[1]
+    assert "A" in lines[2]

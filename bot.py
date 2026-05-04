@@ -11,9 +11,11 @@ from telegram.ext import Application, CommandHandler, MessageHandler, filters, C
 load_dotenv()
 
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
-# Default points at the live Vercel deployment. Override DASHBOARD_URL to
-# point at a preview, staging, or replacement host without redeploying.
-DEFAULT_DASHBOARD_URL = "https://centennial-farm-dashboard-qvytatulr.vercel.app"
+# Single source of truth for the default dashboard host lives in seasonal.py
+# so /dashboard's button URL and /seasonal's JSON fetch can never drift apart.
+# Override DASHBOARD_URL in env to point at a preview, staging, or replacement
+# host without redeploying.
+from seasonal import DEFAULT_DASHBOARD_URL  # noqa: E402
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", DEFAULT_DASHBOARD_URL)
 
 

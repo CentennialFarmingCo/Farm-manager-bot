@@ -68,6 +68,27 @@ def test_default_url_is_vercel(monkeypatch):
     assert "vercel.app" in bot.DEFAULT_DASHBOARD_URL
 
 
+def test_default_url_uses_public_production_alias(monkeypatch):
+    """Bot's default dashboard URL must point at the public 'five' alias, not
+    a stale protected preview deploy. Both /dashboard's button and /seasonal's
+    JSON fetch share this constant so they can never drift."""
+    monkeypatch.delenv("DASHBOARD_URL", raising=False)
+    importlib.reload(bot)
+    assert bot.DEFAULT_DASHBOARD_URL == (
+        "https://centennial-farm-dashboard-five.vercel.app"
+    )
+
+
+def test_default_url_constant_is_shared_with_seasonal():
+    """Single source of truth — bot.py and seasonal.py must reference the same
+    DEFAULT_DASHBOARD_URL object, not duplicated string literals that can drift."""
+    import seasonal
+    assert bot.DEFAULT_DASHBOARD_URL == seasonal.DEFAULT_DASHBOARD_URL
+    # The import in bot.py is `from seasonal import DEFAULT_DASHBOARD_URL`,
+    # so both names refer to the same string object.
+    assert bot.DEFAULT_DASHBOARD_URL is seasonal.DEFAULT_DASHBOARD_URL
+
+
 def test_env_overrides_default(monkeypatch):
     monkeypatch.setenv("DASHBOARD_URL", "https://staging.example.com")
     importlib.reload(bot)
