@@ -46,7 +46,7 @@ pytest
 | Variable               | Required | Default                                                    | Notes                                                                |
 | ---------------------- | -------- | ---------------------------------------------------------- | -------------------------------------------------------------------- |
 | `TELEGRAM_BOT_TOKEN`   | yes      | —                                                          | From @BotFather on Telegram. Store as a Render secret, never in git. |
-| `DASHBOARD_URL`        | no       | `https://centennial-farm-dashboard-qvytatulr.vercel.app`   | Public URL the `/dashboard` command links to (Vercel production).    |
+| `DASHBOARD_URL`        | no       | `https://centennial-farm-dashboard-five.vercel.app`        | Public URL the `/dashboard` command links to (Vercel production alias). |
 | `FARM_DB_FILE`         | no       | `farm_data.db`                                             | Path to SQLite database                                              |
 | `FARM_FIELDS_FILE`     | no       | `fields_map.json`                                          | Path to fields source data                                           |
 | `FARM_LAT`             | no       | `37.30`                                                    | Latitude used by `/weather`. Default is Merced County, CA.           |
@@ -58,6 +58,8 @@ pytest
 | `RAIN_PROB_ALERT_PCT`  | no       | `50`                                                       | Rain-caution probability threshold (%).                              |
 | `RAIN_AMOUNT_ALERT_IN` | no       | `0.10`                                                     | Rain-caution accumulation threshold (inches).                        |
 | `WEATHER_API_TIMEOUT`  | no       | `8`                                                        | HTTP timeout for the Open-Meteo call (seconds).                      |
+| `SEASONAL_URL`         | no       | derived from `DASHBOARD_URL` + `/phenology-summary.json`   | Override the URL `/seasonal` fetches (e.g. a preview deploy).        |
+| `SEASONAL_API_TIMEOUT` | no       | `8`                                                        | HTTP timeout for the seasonal JSON fetch (seconds).                  |
 
 If `DASHBOARD_URL` is missing a scheme it is coerced to `https://`. If the
 value is unparseable, `/dashboard` returns a setup hint instead of an error.
@@ -139,6 +141,10 @@ Detaching the disk **deletes** all data on it.
 - `/weather` (alias `/alerts`) — on-demand forecast plus operational
   alerts (spray wind, heat, frost, rain, irrigation hint). See
   [Weather alerts](#weather-alerts).
+- `/seasonal` — chill portions and insect degree-day model snapshot from
+  the dashboard's CIMIS feed; optional block lookup with
+  `/seasonal Block 1` or `/seasonal Johnston Block 1`. See
+  [Seasonal model](#seasonal-model).
 
 Free-text messages support:
 
@@ -379,3 +385,40 @@ _Source: Open-Meteo (no API key). Thresholds are configurable; always use your o
   vars if your operation runs hotter or windier.
 - This is a decision-support aid. Always cross-check with on-the-ground
   observation before spraying, harvesting, or running frost protection.
+
+## Seasonal model
+
+`/seasonal` fetches the dashboard's published phenology snapshot
+(`/phenology-summary.json`) and replies with a concise summary:
+
+- CIMIS station and the snapshot's local/generated date.
+- Chill portions across the season (with range across blocks).
+- Insect degree-day totals per pest model (peach twig borer, navel
+  orangeworm) including biofix and accumulation window.
+- A by-crop / by-pest rollup (e.g. all freestone peach blocks together).
+- A few block highlights, sorted by acres.
+
+Single-block lookup:
+
+```
+/seasonal Johnston Block 1
+/seasonal Block 12
+```
+
+The lookup matches the block name as it appears on the dashboard. If a
+short label like `Block 1` is ambiguous (more than one ranch has that
+suffix) the bot asks you to use the full label.
+
+The data comes from the dashboard URL — by default the live Vercel host;
+override `DASHBOARD_URL` to point at a preview, or set `SEASONAL_URL` to
+fetch from a different file path entirely. The bot derives
+`<DASHBOARD_URL>/phenology-summary.json` automatically when only
+`DASHBOARD_URL` is set.
+
+### Notes & limitations
+
+- If the dashboard JSON is unavailable, malformed, or marked
+  `available: false`, `/seasonal` returns a one-line operator message
+  rather than crashing or showing a stack trace.
+- The summary is decision-support only — confirm with UC IPM and your PCA
+  before scheduling sprays or evaluating chill satisfaction.
