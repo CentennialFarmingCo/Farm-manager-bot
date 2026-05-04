@@ -331,7 +331,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "/task → Log farm/repair tasks (see /task help)\n"
         "/tasks → List open tasks\n"
         "/today → Daily farm summary\n"
-        "/weather (or /alerts) → Forecast + spray/heat/frost/rain alerts\n\n"
+        "/weather (or /alerts) → Forecast + spray/heat/frost/rain alerts\n"
+        "/seasonal → Chill portions + insect degree-day model snapshot\n\n"
         "Harvest examples:\n"
         "“Block 4 18 bins” or “Block 36A 18 bins”\n\n"
         "Irrigation examples:\n"
@@ -515,6 +516,25 @@ async def weather_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     import weather
     text = weather.get_weather_text()
     await update.message.reply_text(text, parse_mode="Markdown")
+
+
+async def seasonal_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """On-demand seasonal model summary (chill portions + insect degree days)."""
+    import seasonal
+    args_text = (update.message.text or "").strip()
+    parts = args_text.split(maxsplit=1)
+    body = parts[1].strip() if len(parts) > 1 else ""
+    text = seasonal.get_seasonal_text(query=body or None)
+
+    url = normalize_dashboard_url(DASHBOARD_URL)
+    reply_markup = None
+    if url is not None:
+        reply_markup = InlineKeyboardMarkup(
+            [[InlineKeyboardButton("📅 Open Seasonal Dashboard", url=url)]]
+        )
+    await update.message.reply_text(
+        text, parse_mode="Markdown", reply_markup=reply_markup,
+    )
 
 
 SPRAY_HELP = (
@@ -750,6 +770,7 @@ def main():
     app.add_handler(CommandHandler("today", today_command))
     app.add_handler(CommandHandler("weather", weather_command))
     app.add_handler(CommandHandler("alerts", weather_command))
+    app.add_handler(CommandHandler("seasonal", seasonal_command))
     app.add_handler(CommandHandler("spray", spray_command))
     app.add_handler(CommandHandler("task", task_command))
     app.add_handler(CommandHandler("tasks", task_command))
