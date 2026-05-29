@@ -16,6 +16,7 @@ TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 # Override DASHBOARD_URL in env to point at a preview, staging, or replacement
 # host without redeploying.
 from seasonal import DEFAULT_DASHBOARD_URL  # noqa: E402
+from harvest_export import export_after_harvest_log  # noqa: E402
 DASHBOARD_URL = os.getenv("DASHBOARD_URL", DEFAULT_DASHBOARD_URL)
 
 
@@ -742,6 +743,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if parsed["kind"] == "harvest":
         insert_harvest(parsed["entries"])
+        # Fire-and-forget: build a snapshot from SQLite and push it to the
+        # dashboard repo so the Harvest tab updates on the next Vercel build.
+        # Never blocks or raises — see harvest_export.py.
+        export_after_harvest_log(db_file=DB_FILE, fields_file=FIELDS_FILE)
         await update.message.reply_text(
             f"✅ **Logged!** {len(parsed['entries'])} harvest entry(ies) saved."
         )
