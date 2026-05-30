@@ -60,9 +60,37 @@ pytest
 | `WEATHER_API_TIMEOUT`  | no       | `8`                                                        | HTTP timeout for the Open-Meteo call (seconds).                      |
 | `SEASONAL_URL`         | no       | derived from `DASHBOARD_URL` + `/phenology-summary.json`   | Override the URL `/seasonal` fetches (e.g. a preview deploy).        |
 | `SEASONAL_API_TIMEOUT` | no       | `8`                                                        | HTTP timeout for the seasonal JSON fetch (seconds).                  |
+| `HARVEST_EXPORT_PAT`   | no       | —                                                          | GitHub fine-grained PAT for pushing harvest snapshots to the dashboard repo. Without it, harvest logs still save locally but the dashboard's Harvest tab won't update. |
+| `HARVEST_EXPORT_REPO`  | no       | `CentennialFarmingCo/centennial-farm-dashboard`            | Target repo for the snapshot push (`owner/repo`).                    |
+| `HARVEST_EXPORT_PATH`  | no       | `public/harvest.json`                                      | Path inside the dashboard repo where the snapshot is written.        |
+| `HARVEST_EXPORT_BRANCH`| no       | `main`                                                     | Branch to commit the snapshot to.                                    |
+| `HARVEST_EXPORT_MIN_INTERVAL` | no | `30`                                                       | Minimum seconds between snapshot pushes (debounces rapid logs).      |
 
 If `DASHBOARD_URL` is missing a scheme it is coerced to `https://`. If the
 value is unparseable, `/dashboard` returns a setup hint instead of an error.
+
+### Harvest snapshot export (dashboard sync)
+
+When you log harvest from Telegram (e.g. `Block 4 18 bins`), the bot can push
+a refreshed `harvest.json` snapshot to the dashboard repo so the Harvest tab
+updates automatically on the next Vercel build.
+
+To enable:
+
+1. **Create a GitHub fine-grained PAT** scoped to the dashboard repo only:
+   - GitHub → Settings → Developer settings → Personal access tokens → Fine-grained tokens → *Generate new token*
+   - Resource owner: `CentennialFarmingCo`
+   - Repository access: *Only select repositories* → `centennial-farm-dashboard`
+   - Repository permissions: **Contents: Read and write**
+   - Expiration: 90 days (or whatever cadence you can re-rotate)
+2. **Add it to Render** as `HARVEST_EXPORT_PAT` (Environment → Add Secret).
+3. Redeploy the bot.
+
+The push is best-effort: if the PAT is missing, expired, or GitHub is
+unreachable, the user's harvest entry is still saved to the bot's SQLite
+database and `/dashboard` totals still update. Pushes are rate-limited to one
+every 30 seconds (configurable via `HARVEST_EXPORT_MIN_INTERVAL`) so a burst
+of logs results in one consolidated commit. The PAT is never logged.
 
 **Never commit `.env`.** Only `.env.example` (placeholders only) belongs in git.
 
